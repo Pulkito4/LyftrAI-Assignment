@@ -1,0 +1,454 @@
+"""
+Unified HTML parser - converts raw HTML into structured Section objects.
+This parser is used by both static (httpx) and dynamic (Playwright) scrapers.
+"""
+from bs4 import BeautifulSoup, Tag
+from urllib.parse import urljoin
+import re
+
+from backend.models import Section, Content, LinkItem, ImageItem
+
+
+# Maximum character count for rawHtml before truncation
+MAX_RAW_HTML_LENGTH = 5000
+
+# Common noise selectors to remove
+NOISE_SELECTORS = [
+    # Cookie banners
+    '#cookie-consent', '.cookie-banner', '.cookie-notice', '[class*="cookie"]',
+    # Modals and overlays
+    '.modal', '[role="dialog"]', '.overlay', '.popup',
+    # Newsletter popups
+    '.newsletter-popup', '.subscribe-popup',
+    # Ads
+    '.ad', '.advertisement', '[class*="ad-"]', '#ad-container',
+    # Social media widgets (often noisy)
+    '.social-share', '.social-widget',
+]
+
+# Section type keywords for classification
+SECTION_TYPE_KEYWORDS = {
+    'hero': ['hero', 'banner', 'jumbotron', 'splash'],
+    'nav': ['nav', 'navigation', 'menu'],
+    'footer': ['footer', 'copyright'],
+    'pricing': ['pricing', 'price', 'plan'],
+    'faq': ['faq', 'question', 'answer', 'accordion'],
+    'list': ['list', 'items'],
+    'grid': ['grid', 'gallery', 'cards'],
+}
+
+
+def clean_html(soup: BeautifulSoup) -> None:
+    """
+    Remove noise elements from the soup in-place.
+    This includes cookie banners, modals, ads, etc.
+    """
+    for selector in NOISE_SELECTORS:
+        for element in soup.select(selector):
+            element.decompose()
+    
+    # Remove script and style tags
+    for tag in soup.find_all(['script', 'style', 'noscript']):
+        tag.decompose()
+
+
+def classify_section_type(element: Tag) -> str:
+    """
+    Determine the section type based on element attributes and content.
+    Returns one of: 'hero', 'pricing', 'section', 'nav', 'footer', 'list', 'grid', 'faq', 'unknown'
+    """
+    # Get element info
+    tag_name = element.name.lower() if element.name else ''
+    class_str = ' '.join(element.get('class', [])).lower()
+    id_str = (element.get('id') or '').lower()
+    
+    # Check against keywords
+    for section_type, keywords in SECTION_TYPE_KEYWORDS.items():
+        for keyword in keywords:
+            if keyword in f"{tag_name} {class_str} {id_str}":
+                return section_type
+    
+    # Default based on tag
+    if tag_name == 'nav':
+        return 'nav'
+    elif tag_name == 'footer':
+        return 'footer'
+    elif tag_name == 'header' or 'hero' in f"{class_str} {id_str}":
+        return 'hero'
+    elif tag_name in ['article', 'section']:
+        return 'section'
+    
+    return 'unknown'
+
+
+def generate_label(element: Tag, section_type: str) -> str:
+    """
+    Generate a human-readable label for the section.
+    Uses heading text if available, otherwise first 5-7 words of content.
+    """
+    # Try to find a heading
+    heading = element.find(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+    if heading:
+        text = heading.get_text(strip=True)
+        if text:
+            # Truncate to ~50 chars
+            return text[:50] + ('...' if len(text) > 50 else '')
+    
+    # Try aria-label or title
+    aria_label = element.get('aria-label')
+    if aria_label:
+        return aria_label[:50] + ('...' if len(aria_label) > 50 else '')
+    
+    # Get first 5-7 words of text content
+    text = element.get_text(strip=True)
+    if text:
+        words = text.split()[:7]
+        label = ' '.join(words)
+        if len(words) >= 7 or len(text) > len(label):
+            label += '...'
+        return label[:50]
+    
+    # Fallback to section type
+    return f"{section_type.capitalize()} Section"
+
+
+def extract_headings(element: Tag) -> list[str]:
+    """Extract all heading texts (h1-h6) from the element"""
+    headings = []
+    for tag in element.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
+        text = tag.get_text(strip=True)
+        if text:
+            headings.append(text)
+    return headings
+
+
+def extract_text(element: Tag) -> str:
+    """
+    Extract clean text content from the element.
+    Removes extra whitespace and joins paragraphs.
+    """
+    # Get all text, but preserve paragraph structure
+    texts = []
+    for tag in element.find_all(['p', 'div', 'span', 'li', 'td', 'th']):
+        text = tag.get_text(strip=True)
+        if text and text not in texts:  # Avoid duplicates
+            texts.append(text)
+    
+    # If no structured text, get all text
+    if not texts:
+        text = element.get_text(separator=' ', strip=True)
+        # Clean up whitespace
+        text = re.sub(r'\s+', ' ', text)
+        return text
+    
+    return ' '.join(texts)
+
+
+def extract_links(element: Tag, base_url: str) -> list[LinkItem]:
+    """
+    Extract all links from the element and make them absolute URLs.
+    """
+    links = []
+    seen_hrefs = set()
+    
+    for a_tag in element.find_all('a', href=True):
+        href = a_tag['href'].strip()
+        if not href or href.startswith(('#', 'javascript:', 'mailto:', 'tel:')):
+            continue
+        
+        # Make absolute URL
+        absolute_url = urljoin(base_url, href)
+        
+        # Avoid duplicates
+        if absolute_url in seen_hrefs:
+            continue
+        seen_hrefs.add(absolute_url)
+        
+        # Get link text
+        text = a_tag.get_text(strip=True) or absolute_url
+        
+        links.append(LinkItem(text=text, href=absolute_url))
+    
+    return links
+
+
+def extract_images(element: Tag, base_url: str) -> list[ImageItem]:
+    """
+    Extract all images from the element and make src absolute URLs.
+    """
+    images = []
+    seen_srcs = set()
+    
+    for img_tag in element.find_all('img'):
+        src = img_tag.get('src') or img_tag.get('data-src', '')
+        if not src:
+            continue
+        
+        src = src.strip()
+        
+        # Make absolute URL
+        absolute_url = urljoin(base_url, src)
+        
+        # Avoid duplicates
+        if absolute_url in seen_srcs:
+            continue
+        seen_srcs.add(absolute_url)
+        
+        # Get alt text
+        alt = img_tag.get('alt', '').strip()
+        
+        images.append(ImageItem(src=absolute_url, alt=alt))
+    
+    return images
+
+
+def extract_lists(element: Tag) -> list[list[str]]:
+    """
+    Extract all lists (ul, ol) as nested list structure.
+    Each list becomes a List[str] of its items.
+    """
+    lists = []
+    
+    for list_tag in element.find_all(['ul', 'ol'], recursive=True):
+        # Skip nested lists (they'll be processed separately)
+        if list_tag.find_parent(['ul', 'ol']):
+            continue
+        
+        items = []
+        for li in list_tag.find_all('li', recursive=False):
+            text = li.get_text(strip=True)
+            if text:
+                items.append(text)
+        
+        if items:
+            lists.append(items)
+    
+    return lists
+
+
+def extract_tables(element: Tag) -> list[dict]:
+    """
+    Extract tables as list of dicts with headers and rows.
+    """
+    tables = []
+    
+    for table_tag in element.find_all('table'):
+        table_data = {
+            'headers': [],
+            'rows': []
+        }
+        
+        # Extract headers
+        thead = table_tag.find('thead')
+        if thead:
+            header_row = thead.find('tr')
+            if header_row:
+                table_data['headers'] = [
+                    th.get_text(strip=True) 
+                    for th in header_row.find_all(['th', 'td'])
+                ]
+        
+        # Extract rows
+        tbody = table_tag.find('tbody') or table_tag
+        for tr in tbody.find_all('tr'):
+            # Skip header rows
+            if tr.find_parent('thead'):
+                continue
+            
+            row = [td.get_text(strip=True) for td in tr.find_all(['td', 'th'])]
+            if row:
+                table_data['rows'].append(row)
+        
+        if table_data['headers'] or table_data['rows']:
+            tables.append(table_data)
+    
+    return tables
+
+
+def truncate_html(html: str, max_length: int = MAX_RAW_HTML_LENGTH) -> tuple[str, bool]:
+    """
+    Truncate HTML to max_length characters.
+    Returns (truncated_html, was_truncated)
+    """
+    if len(html) <= max_length:
+        return html, False
+    
+    return html[:max_length] + '...', True
+
+
+def extract_content(element: Tag, base_url: str) -> Content:
+    """
+    Extract all content from an element into a Content object.
+    """
+    return Content(
+        headings=extract_headings(element),
+        text=extract_text(element),
+        links=extract_links(element, base_url),
+        images=extract_images(element, base_url),
+        lists=extract_lists(element),
+        tables=extract_tables(element)
+    )
+
+
+def group_by_landmarks(soup: BeautifulSoup, base_url: str) -> list[Section]:
+    """
+    Group content into sections using HTML5 landmarks (header, nav, main, section, article, footer).
+    """
+    sections = []
+    section_counter = 0
+    
+    # Find landmark elements
+    landmarks = soup.find_all(['header', 'nav', 'main', 'section', 'article', 'aside', 'footer'])
+    
+    for element in landmarks:
+        # Skip if this element is inside another landmark (avoid nesting)
+        if element.find_parent(['header', 'nav', 'main', 'section', 'article', 'footer']):
+            continue
+        
+        section_type = classify_section_type(element)
+        label = generate_label(element, section_type)
+        
+        # Generate section ID
+        section_id = f"{section_type}-{section_counter}"
+        section_counter += 1
+        
+        # Extract content
+        content = extract_content(element, base_url)
+        
+        # Skip empty sections
+        if not content.text and not content.headings and not content.links:
+            continue
+        
+        # Get raw HTML
+        raw_html = str(element)
+        raw_html, truncated = truncate_html(raw_html)
+        
+        sections.append(Section(
+            id=section_id,
+            type=section_type,
+            label=label,
+            sourceUrl=base_url,
+            content=content,
+            rawHtml=raw_html,
+            truncated=truncated
+        ))
+    
+    return sections
+
+
+def group_by_headings(soup: BeautifulSoup, base_url: str) -> list[Section]:
+    """
+    Group content into sections using headings (h1-h3).
+    Everything between two headings becomes a section.
+    """
+    sections = []
+    section_counter = 0
+    
+    # Find all top-level headings
+    headings = soup.find_all(['h1', 'h2', 'h3'])
+    
+    for i, heading in enumerate(headings):
+        # Get all siblings until next heading
+        content_elements = []
+        current = heading.next_sibling
+        
+        while current:
+            # Stop at next heading of same or higher level
+            if isinstance(current, Tag) and current.name in ['h1', 'h2', 'h3']:
+                break
+            
+            if isinstance(current, Tag):
+                content_elements.append(current)
+            
+            current = current.next_sibling
+        
+        # Create a wrapper for this section
+        wrapper = soup.new_tag('div')
+        wrapper.append(heading)
+        for elem in content_elements:
+            # Clone the element to avoid modifying original
+            wrapper.append(elem)
+        
+        section_type = 'section'
+        label = heading.get_text(strip=True)[:50]
+        
+        section_id = f"heading-section-{section_counter}"
+        section_counter += 1
+        
+        content = extract_content(wrapper, base_url)
+        
+        # Skip empty sections
+        if not content.text and not content.headings:
+            continue
+        
+        raw_html = str(wrapper)
+        raw_html, truncated = truncate_html(raw_html)
+        
+        sections.append(Section(
+            id=section_id,
+            type=section_type,
+            label=label,
+            sourceUrl=base_url,
+            content=content,
+            rawHtml=raw_html,
+            truncated=truncated
+        ))
+    
+    return sections
+
+
+def parse_html(html: str, url: str) -> list[Section]:
+    """
+    Main parsing function - converts HTML to list of Sections.
+    This is the unified parser used by both static and dynamic scrapers.
+    
+    Strategy:
+    1. Clean HTML (remove noise)
+    2. Try landmark-based grouping
+    3. If insufficient, fallback to heading-based grouping
+    4. If still insufficient, create single section from main content
+    
+    Args:
+        html: Raw HTML string
+        url: Source URL for making links absolute
+    
+    Returns:
+        List of Section objects
+    """
+    soup = BeautifulSoup(html, 'lxml')
+    
+    # Clean noise
+    clean_html(soup)
+    
+    # Try landmark-based grouping first
+    sections = group_by_landmarks(soup, url)
+    
+    # If we got good sections, return them
+    if len(sections) >= 2:
+        return sections
+    
+    # Fallback to heading-based grouping
+    sections = group_by_headings(soup, url)
+    
+    # If still insufficient, create a single section from body/main
+    if not sections:
+        main_element = soup.find('main') or soup.find('body') or soup
+        
+        content = extract_content(main_element, url)
+        
+        # Only create section if there's actual content
+        if content.text or content.headings:
+            raw_html = str(main_element)[:MAX_RAW_HTML_LENGTH]
+            raw_html, truncated = truncate_html(raw_html)
+            
+            sections.append(Section(
+                id="main-content-0",
+                type="section",
+                label=generate_label(main_element, "section"),
+                sourceUrl=url,
+                content=content,
+                rawHtml=raw_html,
+                truncated=truncated
+            ))
+    
+    return sections
