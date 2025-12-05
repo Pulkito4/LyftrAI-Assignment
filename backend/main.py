@@ -11,32 +11,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import Field
 
-from backend.models import ScrapeRequest, ScrapeResult
+from backend.models import ScrapeRequestExtended, ScrapeResult
 from backend.config import HOST, PORT, FRONTEND_DIST_PATH
 
 # Fix MIME type for JavaScript files
 mimetypes.add_type('application/javascript', '.js')
-
-
-class ScrapeRequestExtended(ScrapeRequest):
-    """
-    Extended scrape request with interaction options.
-    
-    Attributes:
-        url: Target URL to scrape (inherited from ScrapeRequest)
-        enableInteractions: Whether to handle user interactions
-        interactionStrategy: Strategy for handling interactions
-    """
-    enable_interactions: bool = Field(
-        default=False,
-        description="Enable interaction handling (clicks, scrolls, pagination)"
-    )
-    interaction_strategy: str = Field(
-        default='auto',
-        description="Interaction strategy: 'auto', 'tabs', 'load_more', 'scroll', 'pagination', 'all'"
-    )
 
 
 app = FastAPI(

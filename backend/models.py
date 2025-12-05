@@ -72,3 +72,22 @@ class ScrapeResult(BaseModel):
 class ScrapeRequest(BaseModel):
     """Request body for POST /scrape"""
     url: str
+
+
+class ScrapeRequestExtended(ScrapeRequest):
+    """
+    Extended scrape request with interaction options.
+    
+    Attributes:
+        url: Target URL to scrape (inherited from ScrapeRequest)
+        enable_interactions: Whether to handle user interactions
+        interaction_strategy: Strategy for handling interactions
+    """
+    enable_interactions: bool = Field(
+        default=False,
+        description="Enable interaction handling (clicks, scrolls, pagination)"
+    )
+    interaction_strategy: str = Field(
+        default='auto',
+        description="Interaction strategy: 'auto', 'tabs', 'load_more', 'scroll', 'pagination', 'all'"
+    )
