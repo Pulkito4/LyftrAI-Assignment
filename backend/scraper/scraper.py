@@ -6,7 +6,7 @@ from datetime import datetime
 from backend.models import ScrapeResult, ScrapeError, Meta, Interactions
 from backend.scraper.static import scrape_static
 from backend.scraper.dynamic import scrape_dynamic
-from backend.scraper.utils import validate_url
+from backend.scraper.utils import validate_url, check_robots_txt
 
 
 async def scrape_url(
@@ -19,11 +19,12 @@ async def scrape_url(
     
     Strategy:
     1. Validate URL
-    2. Attempt static scraping (fast)
-    3. Check if JS rendering is needed (heuristic)
-    4. If needed, fallback to Playwright (slower)
-    5. Optionally handle interactions (clicks, scrolls, pagination)
-    6. Return best available result
+    2. Check robots.txt compliance
+    3. Attempt static scraping (fast)
+    4. Check if JS rendering is needed (heuristic)
+    5. If needed, fallback to Playwright (slower)
+    6. Optionally handle interactions (clicks, scrolls, pagination)
+    7. Return best available result
     
     Args:
         url: URL to scrape
@@ -34,10 +35,9 @@ async def scrape_url(
     """
     errors = []
     
-    # Validate URL first
+    # Step 1: Validate URL
     is_valid, error_msg = validate_url(url)
     if not is_valid:
-        # Return error result immediately
         return ScrapeResult(
             url=url,
             scrapedAt=datetime.utcnow().isoformat() + "Z",
@@ -46,6 +46,22 @@ async def scrape_url(
             interactions=Interactions(),
             errors=[ScrapeError(message=error_msg, phase="validation")]
         )
+    
+    # Step 2: Check robots.txt compliance
+    is_allowed, robots_msg = await check_robots_txt(url)
+    if not is_allowed:
+        return ScrapeResult(
+            url=url,
+            scrapedAt=datetime.utcnow().isoformat() + "Z",
+            meta=Meta(title="Blocked", description="Disallowed by robots.txt", language="en", canonical=None),
+            sections=[],
+            interactions=Interactions(),
+            errors=[ScrapeError(message=robots_msg, phase="validation")]
+        )
+    
+    # Add robots.txt check result as info
+    if "allows" in robots_msg.lower():
+        errors.append(ScrapeError(message=robots_msg, phase="validation"))
     
     try:
         # Step 1: Try static scraping first

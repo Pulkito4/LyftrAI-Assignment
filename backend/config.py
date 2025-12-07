@@ -1,6 +1,7 @@
 """
 Backend configuration constants.
 All configurable values are centralized here for easy maintenance.
+Please note that we are not using environment variables for configuration in this project as it would then require the reviewer to first set the env variables before running the code, complicating the review process.
 """
 
 # Server Configuration

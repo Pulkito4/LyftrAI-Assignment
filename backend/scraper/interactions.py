@@ -5,45 +5,16 @@ from typing import List, Tuple
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout, Error as PlaywrightError
 import asyncio
 
+from backend.config import (
+    MAX_INTERACTION_DEPTH as MAX_DEPTH,
+    NETWORK_IDLE_TIMEOUT as INTERACTION_TIMEOUT,
+    INTERACTIVE_SELECTORS
+)
 
-# Maximum depth for interactions
-MAX_DEPTH = 3
-
-# Timeout for interaction operations
-INTERACTION_TIMEOUT = 5000  # 5 seconds
-
-# Common tab selectors
-TAB_SELECTORS = [
-    '[role="tab"]',
-    '.tab',
-    'button.tab',
-    '.nav-tab',
-    '[data-tab]',
-    'a[role="tab"]',
-]
-
-# Common "load more" button selectors and text patterns
-LOAD_MORE_SELECTORS = [
-    'button:has-text("Load more")',
-    'button:has-text("Show more")',
-    'button:has-text("See more")',
-    'button:has-text("View more")',
-    '.load-more',
-    '.show-more',
-    '[data-testid*="load"]',
-    '[aria-label*="load more"]',
-]
-
-# Pagination selectors
-PAGINATION_SELECTORS = [
-    'a:has-text("Next")',
-    'button:has-text("Next")',
-    '[rel="next"]',
-    '.next',
-    '.pagination a:last-child',
-    '[aria-label*="next"]',
-    '[data-testid*="next"]',
-]
+# Extract selectors from config
+TAB_SELECTORS = INTERACTIVE_SELECTORS["tabs"]
+LOAD_MORE_SELECTORS = INTERACTIVE_SELECTORS["load_more"]
+PAGINATION_SELECTORS = INTERACTIVE_SELECTORS["pagination"]
 
 
 async def try_click_tabs(page: Page) -> List[str]:

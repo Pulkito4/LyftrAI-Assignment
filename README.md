@@ -48,6 +48,41 @@ cd ..
 python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
 
+## 🛠️ Troubleshooting
+
+### Common Issues
+
+**1. Playwright Errors**
+If you see errors related to missing browsers or executables:
+```bash
+# Re-install Playwright browsers
+playwright install chromium
+# Or install system dependencies (Linux only)
+playwright install-deps
+```
+
+**2. Frontend Not Loading**
+- Ensure you have Node.js v18+ installed (`node -v`).
+- Try clearing the `node_modules` folder and reinstalling:
+  ```bash
+  cd frontend
+  rm -rf node_modules package-lock.json
+  npm install
+  npm run build
+  ```
+
+**3. "Network Error" or Connection Refused**
+- Ensure the backend server is running on port 8000.
+- Check if your firewall is blocking the connection.
+- If running in a container, ensure ports are mapped correctly.
+
+**4. Scraping Timeouts**
+- Some sites are slow or have heavy anti-bot protection.
+- Try increasing the timeout in `backend/config.py` if needed.
+- Use the "Static" strategy for faster results on simple pages.
+
+## 🏗️ Architecture
+
 The application will be available at: **http://localhost:8000**
 
 ## 📋 Project Structure

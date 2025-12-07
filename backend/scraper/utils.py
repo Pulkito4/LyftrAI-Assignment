@@ -2,8 +2,58 @@
 Utility functions for scraping operations
 """
 import re
-from urllib.parse import urlparse
+import httpx
+from urllib.parse import urlparse, urljoin
+from urllib.robotparser import RobotFileParser
 from typing import Tuple
+
+
+async def check_robots_txt(url: str, user_agent: str = "*") -> Tuple[bool, str]:
+    """
+    Check if URL is allowed by robots.txt.
+    
+    Args:
+        url: URL to check
+        user_agent: User agent to check for (default: *)
+    
+    Returns:
+        (is_allowed, message)
+    """
+    try:
+        parsed = urlparse(url)
+        robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+        
+        # Fetch robots.txt with timeout
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            try:
+                response = await client.get(robots_url)
+                if response.status_code == 404:
+                    # No robots.txt means all allowed
+                    return True, "No robots.txt found - scraping allowed"
+                
+                if response.status_code != 200:
+                    # Other errors - allow but warn
+                    return True, f"Could not fetch robots.txt (status {response.status_code}) - proceeding anyway"
+                
+                # Parse robots.txt
+                rp = RobotFileParser()
+                rp.parse(response.text.splitlines())
+                
+                # Check if our path is allowed
+                is_allowed = rp.can_fetch(user_agent, url)
+                
+                if not is_allowed:
+                    return False, "URL disallowed by robots.txt"
+                
+                return True, "Robots.txt allows scraping"
+                
+            except httpx.TimeoutException:
+                return True, "Robots.txt fetch timeout - proceeding anyway"
+            except Exception as e:
+                return True, f"Error checking robots.txt: {str(e)} - proceeding anyway"
+                
+    except Exception as e:
+        return True, f"Error parsing robots.txt URL: {str(e)} - proceeding anyway"
 
 
 def validate_url(url: str) -> Tuple[bool, str]:
