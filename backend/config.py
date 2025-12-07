@@ -27,7 +27,7 @@ VIEWPORT_WIDTH = 1920
 VIEWPORT_HEIGHT = 1080
 
 # Main Content Selectors for Dynamic Waiting
-MAIN_CONTENT_SELECTORS = ['main', 'article', '[role="main"]', '#content', '.content']
+MAIN_CONTENT_SELECTORS = ["main", "article", '[role="main"]', "#content", ".content"]
 
 # HTTP Headers
 USER_AGENT = (
@@ -97,13 +97,13 @@ INTERACTIVE_SELECTORS = {
 
 # Section Type Classification Keywords
 SECTION_TYPE_KEYWORDS = {
-    'hero': ['hero', 'banner', 'jumbotron', 'splash'],
-    'nav': ['nav', 'navigation', 'menu'],
-    'footer': ['footer', 'copyright'],
-    'pricing': ['pricing', 'price', 'plan'],
-    'faq': ['faq', 'question', 'answer', 'accordion'],
-    'list': ['list', 'items'],
-    'grid': ['grid', 'gallery', 'cards'],
+    "hero": ["hero", "banner", "jumbotron", "splash"],
+    "nav": ["nav", "navigation", "menu"],
+    "footer": ["footer", "copyright"],
+    "pricing": ["pricing", "price", "plan"],
+    "faq": ["faq", "question", "answer", "accordion"],
+    "list": ["list", "items"],
+    "grid": ["grid", "gallery", "cards"],
 }
 
 # Frontend Static File Path

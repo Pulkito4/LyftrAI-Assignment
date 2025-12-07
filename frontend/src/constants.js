@@ -15,17 +15,17 @@ export const INTERACTION_STRATEGIES = [
   { value: 'all', label: 'All Strategies' },
 ];
 
-// Section Type Emojis
-export const SECTION_TYPE_EMOJIS = {
-  hero: '🎯',
-  nav: '🧭',
-  footer: '📄',
-  pricing: '💰',
-  faq: '❓',
-  list: '📋',
-  grid: '📊',
-  section: '📝',
-  unknown: '❔',
+// Section Type Icons (lucide-react)
+export const SECTION_TYPE_ICONS = {
+  hero: 'Target',
+  nav: 'Navigation',
+  footer: 'FileText',
+  pricing: 'DollarSign',
+  faq: 'HelpCircle',
+  list: 'List',
+  grid: 'Grid',
+  section: 'FileText',
+  unknown: 'Circle',
 };
 
 // UI Constants

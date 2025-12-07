@@ -4,7 +4,7 @@ Exposes main scraping functions and utilities.
 """
 
 from backend.scraper.dynamic import scrape_dynamic
-from backend.scraper.interactions import handle_interactions
+from backend.scraper.interactions import handle_interactions, normalize_url
 from backend.scraper.parser import extract_meta, parse_html
 from backend.scraper.scraper import scrape_url
 from backend.scraper.static import scrape_static

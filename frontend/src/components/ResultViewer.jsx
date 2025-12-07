@@ -105,6 +105,32 @@ function ResultViewer({ result }) {
         </TabsContent>
 
         <TabsContent value="interactions" className="mt-6 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <Card className="bg-card border-border p-6">
+              <div className="flex items-center gap-3 mb-2">
+                <MousePointer className="w-5 h-5 text-primary" />
+                <h3 className="text-muted-foreground text-sm font-medium">Clicks Performed</h3>
+              </div>
+              <p className="text-3xl font-bold text-primary">{result.interactions.clicks}</p>
+            </Card>
+            
+            <Card className="bg-card border-border p-6">
+              <div className="flex items-center gap-3 mb-2">
+                <ArrowDown className="w-5 h-5 text-primary" />
+                <h3 className="text-muted-foreground text-sm font-medium">Scrolls Performed</h3>
+              </div>
+              <p className="text-3xl font-bold text-primary">{result.interactions.scrolls}</p>
+            </Card>
+            
+            <Card className="bg-card border-border p-6">
+              <div className="flex items-center gap-3 mb-2">
+                <Link2 className="w-5 h-5 text-primary" />
+                <h3 className="text-muted-foreground text-sm font-medium">Pages Visited</h3>
+              </div>
+              <p className="text-3xl font-bold text-primary">{result.interactions.pages.length}</p>
+            </Card>
+          </div>
+
           <Card className="bg-card border-border p-6">
             <h3 className="text-primary text-xl font-semibold mb-4">Pages Visited ({result.interactions.pages.length})</h3>
             <ul className="space-y-2">

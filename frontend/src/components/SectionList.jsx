@@ -1,14 +1,25 @@
+import { useState } from 'react'
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import { SECTION_TYPE_EMOJIS, MAX_ITEMS_TO_DISPLAY, TEXT_PREVIEW_LENGTH } from '@/constants'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { 
+  Target, Navigation, FileText, DollarSign, HelpCircle, 
+  List, Grid, Circle, Hash, Type, Link2, Image, ListOrdered, Table 
+} from 'lucide-react'
+import { SECTION_TYPE_ICONS, MAX_ITEMS_TO_DISPLAY, TEXT_PREVIEW_LENGTH } from '@/constants'
 
 function SectionList({ sections }) {
-  const getSectionTypeEmoji = (type) => {
-    return SECTION_TYPE_EMOJIS[type] || SECTION_TYPE_EMOJIS.unknown
+  const getSectionIcon = (type) => {
+    const iconMap = {
+      Target, Navigation, FileText, DollarSign, HelpCircle, List, Grid, Circle
+    }
+    const iconName = SECTION_TYPE_ICONS[type] || SECTION_TYPE_ICONS.unknown
+    const Icon = iconMap[iconName] || Circle
+    return <Icon className="w-4 h-4" />
   }
 
   if (sections.length === 0) {
@@ -29,37 +40,44 @@ function SectionList({ sections }) {
         >
           <AccordionTrigger className="px-6 py-4 hover:bg-slate-900 transition">
             <div className="flex flex-col items-start gap-2 text-left">
-              <span className="text-xs font-semibold text-slate-400 uppercase">
-                {getSectionTypeEmoji(section.type)} {section.type}
+              <span className="text-xs font-semibold text-slate-400 uppercase flex items-center gap-2">
+                {getSectionIcon(section.type)} {section.type}
               </span>
               <h3 className="text-lg text-slate-200 font-medium">{section.label}</h3>
             </div>
           </AccordionTrigger>
 
           <AccordionContent className="px-6 py-4 space-y-6 border-t border-slate-800">
-            <div className="space-y-3">
-              <h4 className="text-blue-400 font-semibold">Content Summary</h4>
-              <div className="flex flex-wrap gap-2">
-                <span className="bg-slate-900 px-3 py-1.5 rounded text-sm text-slate-300">
-                  📌 Headings: {section.content.headings.length}
-                </span>
-                <span className="bg-slate-900 px-3 py-1.5 rounded text-sm text-slate-300">
-                  📝 Text: {section.content.text.length} chars
-                </span>
-                <span className="bg-slate-900 px-3 py-1.5 rounded text-sm text-slate-300">
-                  🔗 Links: {section.content.links.length}
-                </span>
-                <span className="bg-slate-900 px-3 py-1.5 rounded text-sm text-slate-300">
-                  🖼️ Images: {section.content.images.length}
-                </span>
-                <span className="bg-slate-900 px-3 py-1.5 rounded text-sm text-slate-300">
-                  📋 Lists: {section.content.lists.length}
-                </span>
-                <span className="bg-slate-900 px-3 py-1.5 rounded text-sm text-slate-300">
-                  📊 Tables: {section.content.tables.length}
-                </span>
-              </div>
-            </div>
+            <Tabs defaultValue="readable" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 bg-slate-900">
+                <TabsTrigger value="readable">Human Readable</TabsTrigger>
+                <TabsTrigger value="json">Raw JSON</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="readable" className="space-y-6 mt-6">
+                <div className="space-y-3">
+                  <h4 className="text-blue-400 font-semibold">Content Summary</h4>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="bg-slate-900 px-3 py-1.5 rounded text-sm text-slate-300 flex items-center gap-1.5">
+                      <Hash className="w-4 h-4" /> Headings: {section.content.headings.length}
+                    </span>
+                    <span className="bg-slate-900 px-3 py-1.5 rounded text-sm text-slate-300 flex items-center gap-1.5">
+                      <Type className="w-4 h-4" /> Text: {section.content.text.length} chars
+                    </span>
+                    <span className="bg-slate-900 px-3 py-1.5 rounded text-sm text-slate-300 flex items-center gap-1.5">
+                      <Link2 className="w-4 h-4" /> Links: {section.content.links.length}
+                    </span>
+                    <span className="bg-slate-900 px-3 py-1.5 rounded text-sm text-slate-300 flex items-center gap-1.5">
+                      <Image className="w-4 h-4" /> Images: {section.content.images.length}
+                    </span>
+                    <span className="bg-slate-900 px-3 py-1.5 rounded text-sm text-slate-300 flex items-center gap-1.5">
+                      <ListOrdered className="w-4 h-4" /> Lists: {section.content.lists.length}
+                    </span>
+                    <span className="bg-slate-900 px-3 py-1.5 rounded text-sm text-slate-300 flex items-center gap-1.5">
+                      <Table className="w-4 h-4" /> Tables: {section.content.tables.length}
+                    </span>
+                  </div>
+                </div>
 
             {section.content.headings.length > 0 && (
               <div className="space-y-3">
@@ -135,13 +153,21 @@ function SectionList({ sections }) {
               </div>
             )}
 
-            <div className="space-y-3">
-              <h4 className="text-blue-400 font-semibold">Raw HTML</h4>
-              <pre className="bg-slate-900 p-4 rounded-lg overflow-x-auto text-sm leading-relaxed text-slate-300 max-h-80 overflow-y-auto">
-                {section.rawHtml}
-                {section.truncated && <span className="text-yellow-400 italic">{'\n'}... (truncated)</span>}
-              </pre>
-            </div>
+                <div className="space-y-3">
+                  <h4 className="text-blue-400 font-semibold">Raw HTML</h4>
+                  <pre className="bg-slate-900 p-4 rounded-lg overflow-x-auto text-sm leading-relaxed text-slate-300 max-h-80 overflow-y-auto">
+                    {section.rawHtml}
+                    {section.truncated && <span className="text-yellow-400 italic">{'\n'}... (truncated)</span>}
+                  </pre>
+                </div>
+              </TabsContent>
+              
+              <TabsContent value="json" className="mt-6">
+                <pre className="bg-slate-900 p-4 rounded-lg overflow-x-auto text-sm leading-relaxed text-slate-300 max-h-[600px] overflow-y-auto">
+                  {JSON.stringify(section, null, 2)}
+                </pre>
+              </TabsContent>
+            </Tabs>
           </AccordionContent>
         </AccordionItem>
       ))}
