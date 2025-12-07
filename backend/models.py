@@ -81,6 +81,7 @@ class ScrapeResult(BaseModel):
 
 class ScrapeRequest(BaseModel):
     """Request body for POST /scrape"""
+
     url: str
 
 

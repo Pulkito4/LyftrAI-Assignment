@@ -1,6 +1,6 @@
-"""
-Utility functions for scraping operations
-"""
+"""Validation, robots.txt checks, and JS detection heuristics."""
+
+__all__ = ["check_robots_txt", "validate_url", "needs_js_rendering"]
 
 import re
 from typing import Tuple
@@ -20,16 +20,11 @@ from backend.config import (
 
 
 async def check_robots_txt(url: str, user_agent: str = "*") -> Tuple[bool, str]:
-    """
-    Check if URL is allowed by robots.txt.
-
-    Args:
-        url: URL to check
-        user_agent: User agent to check for (default: *)
-
-    Returns:
-        (is_allowed, message)
-    """
+    """Checks robots.txt compliance. Returns (is_allowed, message)."""
+    # Validate user_agent parameter
+    if not user_agent or not user_agent.strip():
+        user_agent = "*"
+    
     try:
         parsed = urlparse(url)
         robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
@@ -71,28 +66,28 @@ async def check_robots_txt(url: str, user_agent: str = "*") -> Tuple[bool, str]:
 
 
 def validate_url(url: str) -> Tuple[bool, str]:
-    """
-    Validate that URL is http(s) and well-formed.
-    Returns (is_valid, error_message)
-    """
-    if not url:
+    """Validates URL: http(s) scheme, well-formed, max 2048 chars."""
+    if not url or not url.strip():
         return False, "URL is required"
 
     url = url.strip()
-
+    
+    # Security: Prevent extremely long URLs (DoS risk)
+    if len(url) > 2048:
+        return False, "URL exceeds maximum length of 2048 characters"
+    
     if not url.startswith(("http://", "https://")):
         return False, "Only http:// and https:// URLs are supported"
 
     try:
         parsed = urlparse(url)
-        # Just try to access netloc - will work if valid
-        _ = parsed.netloc
         return (True, "") if parsed.netloc else (False, "Invalid URL format")
     except Exception as e:
         return False, f"Invalid URL: {str(e)}"
 
 
 def needs_js_rendering(html: str) -> bool:
+    """Heuristic detection: SPA markers, low content, high script count."""
     """
     Heuristic to determine if page needs JavaScript rendering.
 
@@ -112,7 +107,9 @@ def needs_js_rendering(html: str) -> bool:
     # React/Next.js/Gatsby
     if soup.find(id="__next") or soup.find(id="___gatsby"):
         return True
-    if soup.find(attrs={"data-reactroot": True}) or soup.find(attrs={"data-react-helmet": True}):
+    if soup.find(attrs={"data-reactroot": True}) or soup.find(
+        attrs={"data-react-helmet": True}
+    ):
         return True
     # Generic SPA roots
     if soup.find(id="root") or soup.find(id="app") or soup.find(class_="react-root"):
@@ -122,10 +119,16 @@ def needs_js_rendering(html: str) -> bool:
         return True
 
     # 2) Check for JS required messages (from noscript or main text)
-    noscripts = " ".join(ns.get_text(" ", strip=True).lower() for ns in soup.find_all("noscript"))
-    if "enable javascript" in noscripts or "without javascript" in noscripts or "javascript is required" in noscripts:
+    noscripts = " ".join(
+        ns.get_text(" ", strip=True).lower() for ns in soup.find_all("noscript")
+    )
+    if (
+        "enable javascript" in noscripts
+        or "without javascript" in noscripts
+        or "javascript is required" in noscripts
+    ):
         return True
-    
+
     text = soup.get_text().lower()
     if any(phrase in text for phrase in JS_REQUIRED_PHRASES):
         return True
@@ -133,11 +136,25 @@ def needs_js_rendering(html: str) -> bool:
     # 3) Analyze script tags before removing them
     scripts = soup.find_all("script")
     script_count = len(scripts)
-    
+
     # Check for bundled script patterns (webpack, next, vite, etc.)
-    bundler_keywords = ("bundle", "chunk", "webpack", "main.", "next", "app.", "vendor", "_next", "vite")
-    script_srcs = [s.get("src", "") for s in scripts if s.get("src")]
-    has_heavy_bundles = any(any(k in src.lower() for k in bundler_keywords) for src in script_srcs)
+    bundler_keywords = (
+        "bundle",
+        "chunk",
+        "webpack",
+        "main.",
+        "next",
+        "app.",
+        "vendor",
+        "_next",
+        "vite",
+    )
+    # Use generator to avoid building intermediate list
+    has_heavy_bundles = any(
+        any(k in s.get("src", "").lower() for k in bundler_keywords)
+        for s in scripts
+        if s.get("src")
+    )
 
     # 4) Remove script and style tags for content analysis
     for tag in soup.find_all(["script", "style", "noscript"]):
@@ -163,7 +180,7 @@ def needs_js_rendering(html: str) -> bool:
     # 8) Heavy JS with low text ratio (likely CSR shell)
     if has_heavy_bundles and script_count > 10 and text_ratio < 0.03:
         return True
-    
+
     # 9) Very high script count with low text ratio
     if script_count > 30 and text_ratio < 0.05:
         return True

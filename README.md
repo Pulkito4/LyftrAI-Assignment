@@ -131,11 +131,11 @@ LyfterAI/
 
 ### Interaction Handling (Depth ≥ 3)
 
-- **Tabs** - Clicks up to 5 tab elements
-- **Load More Buttons** - Clicks "Load more"/"Show more" buttons (max 3)
-- **Infinite Scroll** - Scrolls to bottom with 2s delays (max 3)
+- **Tabs** - Clicks up to MAX_TABS_TO_CLICK (5) tab elements
+- **Load More Buttons** - Clicks "Load more"/"Show more" buttons (max 3, optimized DOM counting)
+- **Infinite Scroll** - Scrolls to bottom with configurable delays (max 3)
 - **Pagination** - Follows "Next" page links (max 3 pages)
-- **Auto Mode** - Smart detection and execution of all strategies
+- **Auto Mode** - Intelligently combines all strategies based on page structure
 
 ### HTML Parsing & Structure
 
@@ -196,8 +196,30 @@ Three URLs were used for comprehensive testing:
 
 1. **Attempt Static** - Try httpx with 10s timeout
 2. **Check Heuristic** - Evaluate content length, markers, JS requirements
-3. **Fallback to Playwright** - Launch Chromium if needed
+3. **Fallback to Playwright** - Launch Chromium if needed (auto-enables interactions)
 4. **Wait Strategy** - `domcontentloaded` → `networkidle` → selector waits → 1s buffer
+
+**Important Behavior Notes:**
+- When sending just a URL, the scraper will:
+  - Try static scraping first (fast)
+  - If JS rendering is detected as needed, automatically fallback to Playwright **with interactions enabled**
+  - This ensures depth ≥ 3 capabilities are showcased automatically
+- To **disable interactions** when using Playwright, explicitly send:
+  ```json
+  {
+    "url": "https://example.com",
+    "enableInteractions": false
+  }
+  ```
+  This forces static-only scraping (no Playwright fallback)
+- To **force interactions** immediately (skip static), send:
+  ```json
+  {
+    "url": "https://example.com",
+    "enableInteractions": true,
+    "interactionStrategy": "auto"
+  }
+  ```
 5. **Execute Interactions** - Run depth ≥ 3 clicks/scrolls/pagination if enabled
 
 ### Timeout Management
@@ -219,10 +241,23 @@ Three URLs were used for comprehensive testing:
 ### Backend (`backend/config.py`)
 
 ```python
-SCRAPING_TIMEOUT = 60.0          # Global timeout
-STATIC_TIMEOUT = 10.0            # httpx timeout
-DYNAMIC_TIMEOUT = 45.0           # Playwright timeout
-MAX_INTERACTION_DEPTH = 3        # Clicks/scrolls/pages
+# Timeouts
+STATIC_TIMEOUT = 10.0            # HTTP client timeout
+PAGE_LOAD_TIMEOUT = 30000        # Playwright page load (ms)
+NETWORK_IDLE_TIMEOUT = 5000      # Network idle wait (ms)
+
+# Interaction Limits
+MAX_INTERACTION_DEPTH = 3        # Max pages/clicks/scrolls
+MAX_TABS_TO_CLICK = 5           # Max tabs to click
+MAX_URL_LENGTH = 2048           # Security: max URL length
+
+# Interaction Delays
+TAB_CLICK_DELAY = 0.5           # Seconds between tab clicks
+LOAD_MORE_WAIT_TIME = 2         # Wait after load more click
+SCROLL_WAIT_TIME = 2            # Wait after scroll
+PAGINATION_WAIT_TIME = 1        # Wait after page navigation
+
+# User Agent
 USER_AGENT = "Mozilla/5.0..."    # Browser user agent
 ```
 

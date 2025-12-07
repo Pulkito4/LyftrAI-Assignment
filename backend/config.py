@@ -21,6 +21,15 @@ MIN_SEMANTIC_CONTENT_LENGTH = 2000  # Minimum content for high script count tole
 MAX_SCRIPT_COUNT_THRESHOLD = 20  # Maximum scripts before requiring more content
 MAX_RAW_HTML_LENGTH = 5000  # Maximum length of raw HTML to store per section
 MAX_INTERACTION_DEPTH = 3  # Maximum depth for pagination/scrolls/clicks
+MAX_URL_LENGTH = 2048  # Maximum allowed URL length (security)
+
+# Interaction Configuration
+MAX_TABS_TO_CLICK = 5  # Maximum number of tabs to click
+MAX_TEXT_PREVIEW_LENGTH = 50  # Maximum length of text preview in interaction logs
+TAB_CLICK_DELAY = 0.5  # Delay in seconds between tab clicks
+LOAD_MORE_WAIT_TIME = 2  # Wait time in seconds after clicking load more
+SCROLL_WAIT_TIME = 2  # Wait time in seconds after scroll
+PAGINATION_WAIT_TIME = 1  # Wait time in seconds after pagination
 
 # Browser Configuration
 VIEWPORT_WIDTH = 1920

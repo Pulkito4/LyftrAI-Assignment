@@ -1,7 +1,6 @@
-"""
-Unified HTML parser - converts raw HTML into structured Section objects.
-This parser is used by both static (httpx) and dynamic (Playwright) scrapers.
-"""
+"""Unified HTML→Section parser for both static and dynamic scrapers."""
+
+__all__ = ["parse_html", "extract_meta"]
 
 import re
 from urllib.parse import urljoin
@@ -26,14 +25,7 @@ def _safe_extract(extractor_func, default=""):
 
 
 def extract_meta(html: str, url: str, strategy: str = None) -> Meta:
-    """
-    Extract metadata from HTML (title, description, language, canonical).
-    
-    Args:
-        html: Raw HTML string
-        url: Source URL
-        strategy: Optional scraping strategy ("static" or "js")
-    """
+    """Extracts page metadata (title, description, language, canonical, strategy)."""
     soup = BeautifulSoup(html, "lxml")
 
     title = (
@@ -55,15 +47,16 @@ def extract_meta(html: str, url: str, strategy: str = None) -> Meta:
     )
 
     return Meta(
-        title=title, description=description, language=language, canonical=canonical, strategy=strategy
+        title=title,
+        description=description,
+        language=language,
+        canonical=canonical,
+        strategy=strategy,
     )
 
 
 def clean_html(soup: BeautifulSoup) -> None:
-    """
-    Remove noise elements from the soup in-place.
-    This includes cookie banners, modals, ads, etc.
-    """
+    """Removes noise (scripts, styles, ads, modals, cookie banners) in-place."""
     for selector in NOISE_SELECTORS:
         for element in soup.select(selector):
             element.decompose()
@@ -74,10 +67,7 @@ def clean_html(soup: BeautifulSoup) -> None:
 
 
 def classify_section_type(element: Tag) -> str:
-    """
-    Determine the section type based on element attributes and content.
-    Returns one of: 'hero', 'pricing', 'section', 'nav', 'footer', 'list', 'grid', 'faq', 'unknown'
-    """
+    """Classifies section type: hero, nav, footer, pricing, faq, list, grid, or unknown."""
     # Get element info
     tag_name = element.name.lower() if element.name else ""
     class_str = " ".join(element.get("class", [])).lower()
@@ -148,6 +138,7 @@ def extract_text(element: Tag) -> str:
     Skips content inside tables (as they are extracted separately).
     If the content is mostly links (>60%), returns empty string to avoid redundancy.
     """
+
     def get_text_skipping_tags(el, tags_to_skip):
         texts = []
         for child in el.children:
@@ -162,14 +153,14 @@ def extract_text(element: Tag) -> str:
         return " ".join(texts)
 
     # Extract text skipping tables
-    text = get_text_skipping_tags(element, ['table'])
-    
+    text = get_text_skipping_tags(element, ["table"])
+
     # Clean up whitespace
     text = re.sub(r"\s+", " ", text).strip()
-    
+
     if not text:
         return ""
-        
+
     # Check link density
     # Calculate length of text inside links
     link_text_len = 0
@@ -177,14 +168,14 @@ def extract_text(element: Tag) -> str:
         # Only count links that are NOT inside tables (since we already skipped tables)
         if not a.find_parent("table"):
             link_text_len += len(a.get_text(strip=True))
-            
+
     # Calculate density
     if len(text) > 0:
         density = link_text_len / len(text)
         # If more than 60% of the text is links, it's likely a link list/nav
         if density > 0.6:
             return ""
-            
+
     return text
 
 
@@ -360,7 +351,13 @@ def group_by_landmarks(soup: BeautifulSoup, base_url: str) -> list[Section]:
         content = extract_content(element, base_url)
 
         # Skip empty sections
-        if not content.text and not content.headings and not content.links and not content.tables and not content.images:
+        if (
+            not content.text
+            and not content.headings
+            and not content.links
+            and not content.tables
+            and not content.images
+        ):
             continue
 
         # Get raw HTML
@@ -424,7 +421,13 @@ def group_by_headings(soup: BeautifulSoup, base_url: str) -> list[Section]:
         content = extract_content(wrapper, base_url)
 
         # Skip empty sections
-        if not content.text and not content.headings and not content.links and not content.tables and not content.images:
+        if (
+            not content.text
+            and not content.headings
+            and not content.links
+            and not content.tables
+            and not content.images
+        ):
             continue
 
         raw_html = str(wrapper)
@@ -485,7 +488,13 @@ def parse_html(html: str, url: str) -> list[Section]:
         content = extract_content(main_element, url)
 
         # Only create section if there's actual content
-        if content.text or content.headings or content.links or content.tables or content.images:
+        if (
+            content.text
+            or content.headings
+            or content.links
+            or content.tables
+            or content.images
+        ):
             raw_html = str(main_element)[:MAX_RAW_HTML_LENGTH]
             raw_html, truncated = truncate_html(raw_html)
 

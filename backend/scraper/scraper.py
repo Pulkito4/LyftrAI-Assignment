@@ -2,7 +2,7 @@
 Main scraping orchestrator - coordinates static and dynamic scraping with fallback
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from backend.models import ScrapeResult, ScrapeError, Meta, Interactions
 from backend.scraper.dynamic import scrape_dynamic
@@ -10,106 +10,71 @@ from backend.scraper.static import scrape_static
 from backend.scraper.utils import validate_url, check_robots_txt
 
 
+def _error_result(url: str, errors: list[ScrapeError]) -> ScrapeResult:
+    """Create an error result with minimal structure."""
+    return ScrapeResult(
+        url=url,
+        scrapedAt=datetime.now(timezone.utc).isoformat(),
+        meta=Meta(title="Error", description="", language="en", canonical=None),
+        sections=[],
+        interactions=Interactions(),
+        errors=errors,
+    )
+
+
 async def scrape_url(
     url: str, enable_interactions: bool = False, interaction_strategy: str = "auto"
 ) -> ScrapeResult:
     """
-    Main scraping function with fallback strategy.
-
-    Strategy:
-    1. Validate URL
-    2. Check robots.txt compliance
-    3. Attempt static scraping (fast)
-    4. Check if JS rendering is needed (heuristic)
-    5. If needed, fallback to Playwright (slower)
-    6. Optionally handle interactions (clicks, scrolls, pagination)
-    7. Return best available result
+    Scrapes a URL with intelligent static→dynamic fallback.
+    Always returns a result (errors logged in result.errors).
 
     Args:
-        url: URL to scrape
-        enable_interactions: Whether to handle interactions (depth >= 3)
-        interaction_strategy: Strategy for interactions ('auto', 'tabs', 'load_more', 'scroll', 'pagination', 'all')
-
-    This always returns a ScrapeResult (may contain errors).
+        url: Target URL
+        enable_interactions: Enable depth ≥ 3 interactions (tabs, pagination, etc.)
+        interaction_strategy: 'auto', 'tabs', 'load_more', 'scroll', 'pagination', or 'all'
     """
-    errors = []
-
-    # Step 1: Validate URL
+    # Validate URL
     is_valid, error_msg = validate_url(url)
     if not is_valid:
-        return ScrapeResult(
-            url=url,
-            scrapedAt=datetime.utcnow().isoformat() + "Z",
-            meta=Meta(title="Error", description="", language="en", canonical=None),
-            sections=[],
-            interactions=Interactions(),
-            errors=[ScrapeError(message=error_msg, phase="validation")],
-        )
+        return _error_result(url, [ScrapeError(message=error_msg, phase="validation")])
 
-    # Step 2: Check robots.txt compliance
+    # Check robots.txt compliance
     is_allowed, robots_msg = await check_robots_txt(url)
     if not is_allowed:
-        return ScrapeResult(
-            url=url,
-            scrapedAt=datetime.utcnow().isoformat() + "Z",
-            meta=Meta(
-                title="Blocked",
-                description="Disallowed by robots.txt",
-                language="en",
-                canonical=None,
-            ),
-            sections=[],
-            interactions=Interactions(),
-            errors=[ScrapeError(message=robots_msg, phase="validation")],
-        )
+        return _error_result(url, [ScrapeError(message=robots_msg, phase="validation")])
+
+    errors = []
 
     try:
-        # If interactions are enabled, skip static and go directly to Playwright
+        # If interactions enabled, skip static and go directly to Playwright
         if enable_interactions:
             dynamic_result = await scrape_dynamic(
-                url,
-                enable_interactions=True,
-                interaction_strategy=interaction_strategy,
+                url, enable_interactions=True, interaction_strategy=interaction_strategy
             )
-            if dynamic_result:
-                return dynamic_result
+            return dynamic_result or _error_result(url, errors)
         
         # Try static scraping first
         static_result, needs_js = await scrape_static(url)
 
-        # Return early if static scraping was successful
         if static_result and not needs_js:
             return static_result
 
-        # Fallback to dynamic scraping
-        if needs_js:
-            errors.append(
-                ScrapeError(
-                    message="Static HTML insufficient - using JavaScript rendering with interactions",
-                    phase="fallback",
-                )
+        # Fallback to dynamic with auto-enabled interactions
+        errors.append(
+            ScrapeError(
+                message="Static HTML insufficient - using JavaScript rendering with interactions",
+                phase="fallback",
             )
-            # Auto-enable interactions when Playwright is used (showcase depth >= 3)
-            dynamic_result = await scrape_dynamic(
-                url,
-                enable_interactions=True,  # Auto-enable for JS-heavy sites
-                interaction_strategy=interaction_strategy,
-            )
-        else:
-            # No JS needed, but trying dynamic anyway
-            dynamic_result = await scrape_dynamic(
-                url,
-                enable_interactions=False,
-                interaction_strategy=interaction_strategy,
-            )
-
-        if dynamic_result:
-            dynamic_result.errors.extend(errors)
-            return dynamic_result
-
-        if static_result:
-            static_result.errors.extend(errors)
-            return static_result
+        )
+        dynamic_result = await scrape_dynamic(
+            url, enable_interactions=needs_js, interaction_strategy=interaction_strategy
+        )
+        
+        result = dynamic_result or static_result
+        if result:
+            result.errors.extend(errors)
+            return result
 
     except Exception as e:
         errors.append(
@@ -119,11 +84,4 @@ async def scrape_url(
             )
         )
 
-    return ScrapeResult(
-        url=url,
-        scrapedAt=datetime.utcnow().isoformat() + "Z",
-        meta=Meta(title="Error", description="", language="en", canonical=None),
-        sections=[],
-        interactions=Interactions(pages=[url]),
-        errors=errors,
-    )
+    return _error_result(url, errors)
