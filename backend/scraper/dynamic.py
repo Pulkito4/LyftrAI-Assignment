@@ -50,7 +50,6 @@ async def scrape_dynamic(
     """
     errors = []
     pages_visited = []
-    html_contents = []
 
     browser: Optional[Browser] = None
 
@@ -133,13 +132,17 @@ async def scrape_dynamic(
             # Small delay for any remaining dynamic content
             await asyncio.sleep(1)
 
+            # Initialize interaction variables
+            interaction_results = {}
+            html_contents = []
+
             # Handle interactions if enabled
             if enable_interactions:
                 try:
                     interaction_results = await handle_interactions(
                         page, strategy=interaction_strategy
                     )
-                    pages_visited = interaction_results["pages"]
+                    pages_visited = interaction_results.get("pages", [page.url])
                     html_contents = interaction_results.get("html_contents", [])
 
                 except Exception as e:
@@ -149,6 +152,9 @@ async def scrape_dynamic(
                             phase="interaction",
                         )
                     )
+                    pages_visited = [page.url]
+            else:
+                pages_visited = [page.url]
 
             # Get the rendered HTML (after interactions)
             try:

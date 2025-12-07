@@ -142,29 +142,17 @@ def extract_text(element: Tag) -> str:
     """
     Extract clean text content from the element.
     Removes extra whitespace and joins paragraphs.
-    Excludes navigation and purely structural elements.
     """
-    # Clone element to avoid modifying original
-    element_copy = BeautifulSoup(str(element), "lxml")
-    
-    # Remove navigation, header, and footer elements (they're captured separately as sections)
-    for tag in element_copy.find_all(["nav", "header", "footer"]):
-        tag.decompose()
-    
-    # Get all text from meaningful content elements
+    # Get all text, but preserve paragraph structure
     texts = []
-    for tag in element_copy.find_all(["p", "div", "span", "li", "td", "th", "article", "section"]):
-        # Skip if this tag is just a link wrapper with no other text
-        if tag.name in ["div", "span"] and tag.find("a") and not tag.get_text(strip=True).replace(tag.find("a").get_text(strip=True), "").strip():
-            continue
-            
+    for tag in element.find_all(["p", "div", "span", "li", "td", "th"]):
         text = tag.get_text(strip=True)
         if text and text not in texts:  # Avoid duplicates
             texts.append(text)
 
-    # If no structured text found, get remaining text
+    # If no structured text, get all text
     if not texts:
-        text = element_copy.get_text(separator=" ", strip=True)
+        text = element.get_text(separator=" ", strip=True)
         # Clean up whitespace
         text = re.sub(r"\s+", " ", text)
         return text

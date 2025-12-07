@@ -252,7 +252,7 @@ async def handle_interactions(page: Page, strategy: str = "auto") -> dict:
 
         if strategy in ["auto", "pagination", "all"]:
             pagination_pages, _, pagination_html = await try_pagination(page, max_pages=MAX_DEPTH)
-            # Replace pages with pagination results
+            # Replace pages and html_contents with pagination results
             if pagination_pages:
                 pages = pagination_pages
                 html_contents = pagination_html

@@ -20,6 +20,9 @@ function ResultViewer({ result }) {
     URL.revokeObjectURL(url)
   }
 
+  // Filter out fallback "errors" which are just informational
+  const displayErrors = result.errors ? result.errors.filter(e => e.phase !== 'fallback') : []
+
   return (
     <Card className="bg-card border-border p-8">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8 pb-8 border-b-2 border-border">
@@ -54,14 +57,14 @@ function ResultViewer({ result }) {
         </Button>
       </div>
 
-      {result.errors && result.errors.length > 0 && (
+      {displayErrors.length > 0 && (
         <div className="bg-yellow-500/10 border border-yellow-500 rounded-lg p-6 mb-8">
           <h3 className="text-yellow-500 text-xl font-semibold mb-3 flex items-center gap-2">
             <AlertTriangle className="w-5 h-5" />
             Warnings/Errors
           </h3>
           <div className="space-y-2">
-            {result.errors.map((err, idx) => (
+            {displayErrors.map((err, idx) => (
               <div key={idx} className="flex gap-4">
                 <span className="text-yellow-400 font-semibold shrink-0">[{err.phase}]</span>
                 <span className="text-muted-foreground">{err.message}</span>
