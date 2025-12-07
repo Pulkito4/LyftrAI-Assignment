@@ -1,18 +1,15 @@
 # LyftrAI Assignment - Advanced Web Scraper
 
-A full-stack web scraping application with static and dynamic rendering capabilities, interaction handling for depth ≥ 3, and a modern React UI.
+A full-stack web scraping application with static/dynamic fallback, interaction handling for depth ≥ 3, and a modern React UI.
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-
-- Python 3.11 or higher
-- Node.js 22.x or higher
+- Python 3.11+
+- Node.js 22.x+
 - Git
 
-### Installation & Running
-
-**Option 1: Using the automated script (Recommended)**
+### Setup & Run
 
 **Linux/Mac:**
 ```bash
@@ -25,310 +22,64 @@ chmod +x run.sh
 .\run.ps1
 ```
 
-**Option 2: Manual setup**
-
-```bash
-# 1. Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# 2. Install backend dependencies
-pip install -r requirements.txt
-
-# 3. Install Playwright browsers
-playwright install chromium
-
-# 4. Install frontend dependencies and build
-cd frontend
-npm install
-npm run build
-cd ..
-
-# 5. Start the server
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
-```
-
-## 🛠️ Troubleshooting
-
-### Common Issues
-
-**1. Playwright Errors**
-If you see errors related to missing browsers or executables:
-```bash
-# Re-install Playwright browsers
-playwright install chromium
-# Or install system dependencies (Linux only)
-playwright install-deps
-```
-
-**2. Frontend Not Loading**
-- Ensure you have Node.js v18+ installed (`node -v`).
-- Try clearing the `node_modules` folder and reinstalling:
-  ```bash
-  cd frontend
-  rm -rf node_modules package-lock.json
-  npm install
-  npm run build
-  ```
-
-**3. "Network Error" or Connection Refused**
-- Ensure the backend server is running on port 8000.
-- Check if your firewall is blocking the connection.
-- If running in a container, ensure ports are mapped correctly.
-
-**4. Scraping Timeouts**
-- Some sites are slow or have heavy anti-bot protection.
-- Try increasing the timeout in `backend/config.py` if needed.
-- Use the "Static" strategy for faster results on simple pages.
-
-## 🏗️ Architecture
-
 The application will be available at: **http://localhost:8000**
 
-## 📋 Project Structure
+### Automation Note
+The scripts automatically handle:
+1. Virtual environment creation & dependency installation
+2. Playwright browser binaries download (~300MB)
+3. Frontend build (`npm run build`)
+4. Server startup
 
-```
-LyfterAI/
-├── backend/
-│   ├── __init__.py              # Package initialization
-│   ├── config.py                # Configuration constants
-│   ├── main.py                  # FastAPI application entry point
-│   ├── models.py                # Pydantic data models
-│   └── scraper/
-│       ├── __init__.py          # Scraper package exports
-│       ├── dynamic.py           # Playwright-based dynamic scraper
-│       ├── interactions.py      # Interaction handlers (tabs, pagination, etc.)
-│       ├── parser.py            # HTML parsing and section extraction
-│       ├── scraper.py           # Main orchestrator with fallback logic
-│       ├── static.py            # httpx-based static scraper
-│       └── utils.py             # Validation and heuristic utilities
-├── frontend/
-│   ├── src/
-│   │   ├── components/          # React components (shadcn/ui)
-│   │   ├── constants.js         # Frontend configuration
-│   │   ├── App.jsx              # Main application
-│   │   └── index.css            # Tailwind CSS imports
-│   ├── index.html               # HTML entry point
-│   ├── jsconfig.json            # Path aliases configuration
-│   ├── vite.config.js           # Vite build configuration
-│   └── package.json             # Frontend dependencies
-├── requirements.txt             # Python dependencies
-├── run.sh                       # Linux/Mac setup script
-├── run.ps1                      # Windows PowerShell setup script
-├── README.md                    # This file
-├── design_notes.md              # Architecture and design decisions
-└── capabilities.json            # Feature flags and capabilities
-```
 
-## 🎯 Features
+---
 
-### Core Scraping Capabilities
+## 🧪 Test URLs
 
-- **Static Scraping** - Fast httpx-based requests with User-Agent headers
-- **Dynamic Scraping** - Playwright with Chromium for JavaScript-heavy sites
-- **Smart Fallback** - Automatic detection and fallback from static to dynamic
-- **Heuristic Detection** - Content length, markers, and JS phrase analysis
+Three URLs used for testing with specific characteristics:
 
-### Interaction Handling (Depth ≥ 3)
+### 1. **http://example.com** — Simple Static Page
+- **Type:** Minimal HTML, no JavaScript
+- **Result:** 1 section, ~112 characters
+- **Tests:** Basic static scraping, fast response (<1s)
 
-- **Tabs** - Clicks up to MAX_TABS_TO_CLICK (5) tab elements
-- **Load More Buttons** - Clicks "Load more"/"Show more" buttons (max 3, optimized DOM counting)
-- **Infinite Scroll** - Scrolls to bottom with configurable delays (max 3)
-- **Pagination** - Follows "Next" page links (max 3 pages)
-- **Auto Mode** - Intelligently combines all strategies based on page structure
+### 2. **https://en.wikipedia.org/wiki/Web_scraping** — Rich Static Content
+- **Type:** Complex HTML with tables, lists, links
+- **Result:** 5+ sections, 1000+ characters
+- **Tests:** Semantic section grouping, User-Agent handling, noise filtering
 
-### HTML Parsing & Structure
+### 3. **https://news.ycombinator.com/** — Pagination (Depth 3)
+- **Type:** Server-side rendered with "More" pagination link
+- **Result:** 3 pages visited, depth requirement met
+- **Tests:** Interaction handling, pagination strategy, multiple page scraping
+- **Config:** `{"enable_interactions": true, "interaction_strategy": "pagination"}`
 
-- **Semantic Sections** - Groups by HTML5 landmarks (`<header>`, `<main>`, `<nav>`, `<footer>`)
-- **Heading Groups** - Falls back to h1-h3 heading hierarchy
-- **Section Types** - Classifies as hero, nav, footer, pricing, FAQ, list, grid, or generic
-- **Content Extraction** - Extracts headings, text, links, images, lists, and tables
-- **Noise Filtering** - Removes cookie banners, modals, ads, scripts, and styles
+---
 
-### API & Frontend
+## 📊 API Usage
 
-- **FastAPI Backend** - RESTful API with `/scrape` and `/healthz` endpoints
-- **React UI** - Modern interface with Tailwind CSS and shadcn/ui components
-- **Real-time Feedback** - Loading states, error handling, and progress indicators
-- **JSON Export** - Download scraped data as structured JSON
-- **Tabbed Results** - View sections, raw JSON, or interaction details
+### Interactive Docs
+- **Swagger UI:** http://localhost:8000/docs
+- **ReDoc:** http://localhost:8000/redoc
 
-## 🧪 Testing URLs
+### Endpoint: POST /scrape
 
-Three URLs were used for comprehensive testing:
-
-### 1. example.com (Simple Static)
-```json
-{
-  "url": "http://example.com",
-  "enableInteractions": false,
-  "interactionStrategy": "auto"
-}
-```
-**Result:** 1 section extracted, 112 characters of content  
-**Notes:** Minimal page, static scraping sufficient
-
-### 2. Wikipedia - Web_scraping (Rich Static)
-```json
-{
-  "url": "https://en.wikipedia.org/wiki/Web_scraping",
-  "enableInteractions": false,
-  "interactionStrategy": "auto"
-}
-```
-**Result:** 5 sections, 1158+ characters  
-**Notes:** Requires User-Agent header, rich semantic structure
-
-### 3. Hacker News (Pagination - Depth 3)
-```json
-{
-  "url": "https://news.ycombinator.com/",
-  "enableInteractions": true,
-  "interactionStrategy": "pagination"
-}
-```
-**Result:** 3 pages visited, pagination depth requirement met  
-**Notes:** Tests interaction handling with "More" link following
-
-## 🏗️ Architecture Highlights
-
-### Static → Dynamic Fallback Strategy
-
-1. **Attempt Static** - Try httpx with 10s timeout
-2. **Check Heuristic** - Evaluate content length, markers, JS requirements
-3. **Fallback to Playwright** - Launch Chromium if needed (auto-enables interactions)
-4. **Wait Strategy** - `domcontentloaded` → `networkidle` → selector waits → 1s buffer
-
-**Important Behavior Notes:**
-- When sending just a URL, the scraper will:
-  - Try static scraping first (fast)
-  - If JS rendering is detected as needed, automatically fallback to Playwright **with interactions enabled**
-  - This ensures depth ≥ 3 capabilities are showcased automatically
-- To **disable interactions** when using Playwright, explicitly send:
-  ```json
-  {
-    "url": "https://example.com",
-    "enableInteractions": false
-  }
-  ```
-  This forces static-only scraping (no Playwright fallback)
-- To **force interactions** immediately (skip static), send:
-  ```json
-  {
-    "url": "https://example.com",
-    "enableInteractions": true,
-    "interactionStrategy": "auto"
-  }
-  ```
-5. **Execute Interactions** - Run depth ≥ 3 clicks/scrolls/pagination if enabled
-
-### Timeout Management
-
-- **Static Scraper:** 10 seconds
-- **Playwright Scraper:** 45 seconds (with interaction buffer)
-- **Global Timeout:** 60 seconds total
-- **Buffer:** 10 seconds for processing
-
-### Content Grouping Logic
-
-1. **Try Landmarks** - Group by `<header>`, `<main>`, `<article>`, `<section>`, `<aside>`, `<nav>`, `<footer>`
-2. **Fallback to Headings** - Use h1-h3 hierarchy if landmarks insufficient
-3. **Label Generation** - Use first heading or first 5-7 words of content
-4. **Type Classification** - Detect hero, nav, footer, pricing, FAQ patterns
-
-## 🔧 Configuration
-
-### Backend (`backend/config.py`)
-
-```python
-# Timeouts
-STATIC_TIMEOUT = 10.0            # HTTP client timeout
-PAGE_LOAD_TIMEOUT = 30000        # Playwright page load (ms)
-NETWORK_IDLE_TIMEOUT = 5000      # Network idle wait (ms)
-
-# Interaction Limits
-MAX_INTERACTION_DEPTH = 3        # Max pages/clicks/scrolls
-MAX_TABS_TO_CLICK = 5           # Max tabs to click
-MAX_URL_LENGTH = 2048           # Security: max URL length
-
-# Interaction Delays
-TAB_CLICK_DELAY = 0.5           # Seconds between tab clicks
-LOAD_MORE_WAIT_TIME = 2         # Wait after load more click
-SCROLL_WAIT_TIME = 2            # Wait after scroll
-PAGINATION_WAIT_TIME = 1        # Wait after page navigation
-
-# User Agent
-USER_AGENT = "Mozilla/5.0..."    # Browser user agent
-```
-
-### Frontend (`frontend/src/constants.js`)
-
-```javascript
-API_ENDPOINTS = {
-  SCRAPE: '/scrape',
-  HEALTH: '/healthz'
-}
-
-INTERACTION_STRATEGIES = [
-  'auto', 'tabs', 'load_more', 'scroll', 'pagination', 'all'
-]
-
-UI_CONFIG = {
-  MAX_PREVIEW_LENGTH: 300,
-  MAX_HEADINGS_DISPLAY: 5,
-  // ...
-}
-```
-
-## 📊 API Documentation
-
-### Interactive API Documentation
-
-The FastAPI backend provides interactive API documentation:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-
-### POST /scrape
-
-#### Request Schema
-
-**Fields:**
-- `url` (string, required) - The URL to scrape
-- `enable_interactions` (boolean, optional, default: `false`) - Enable interaction handling (clicks, scrolls, pagination)
-- `interaction_strategy` (string, optional, default: `"auto"`) - Strategy for handling interactions
-  - `"auto"` - Smart detection and execution of all strategies
-  - `"tabs"` - Focus on clicking tabs
-  - `"load_more"` - Focus on "Load more" buttons
-  - `"scroll"` - Focus on infinite scroll
-  - `"pagination"` - Focus on pagination links
-  - `"all"` - Try everything
-
-#### Example Requests
-
-**Basic Scraping (JSON):**
-```json
-{
-  "url": "https://example.com"
-}
-```
-
-**With Interactions (JSON):**
+**Request Body:**
 ```json
 {
   "url": "https://example.com",
-  "enable_interactions": true,
+  "enable_interactions": false,
   "interaction_strategy": "auto"
 }
 ```
 
-**Using cURL:**
-```bash
-# Basic scraping
-curl -X POST http://localhost:8000/scrape \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com"}'
+**Fields:**
+- `url` (required) - Target URL to scrape
+- `enable_interactions` (optional, default: false) - Enable depth ≥ 3 interactions
+- `interaction_strategy` (optional, default: "auto") - Strategy: `"auto"`, `"tabs"`, `"load_more"`, `"scroll"`, `"pagination"`, `"all"`
 
-# With interactions enabled
+**cURL Example:**
+```bash
 curl -X POST http://localhost:8000/scrape \
   -H "Content-Type: application/json" \
   -d '{
@@ -338,43 +89,35 @@ curl -X POST http://localhost:8000/scrape \
   }'
 ```
 
-**Using PowerShell:**
+**PowerShell Example:**
 ```powershell
-# Basic scraping
 Invoke-RestMethod -Uri "http://localhost:8000/scrape" -Method Post `
-  -Body '{"url": "https://example.com"}' `
-  -ContentType "application/json"
-
-# With interactions enabled
-Invoke-RestMethod -Uri "http://localhost:8000/scrape" -Method Post `
-  -Body '{
-    "url": "https://news.ycombinator.com/",
-    "enable_interactions": true,
-    "interaction_strategy": "pagination"
-  }' `
+  -Body '{"url": "https://news.ycombinator.com/", "enable_interactions": true}' `
   -ContentType "application/json"
 ```
 
-#### Response:
+**Response Structure:**
 ```json
 {
   "url": "https://example.com",
-  "timestamp": "2025-12-05T10:30:00Z",
+  "scrapedAt": "2025-12-07T10:30:00+00:00",
   "meta": {
-    "title": "Example Domain",
-    "description": "Example description",
+    "title": "Page Title",
+    "description": "Page description",
     "language": "en",
-    "canonical": "https://example.com"
+    "canonical": "https://example.com",
+    "strategy": "static"
   },
   "sections": [
     {
-      "id": "section-1",
-      "type": "section",
-      "label": "Example Domain",
+      "id": "section-0",
+      "type": "hero",
+      "label": "Main Heading",
+      "sourceUrl": "https://example.com",
       "content": {
         "headings": ["Example Domain"],
-        "text": "This domain is for use in illustrative examples...",
-        "links": [{"text": "More information...", "href": "..."}],
+        "text": "This domain is for use...",
+        "links": [{"text": "More info", "href": "..."}],
         "images": [],
         "lists": [],
         "tables": []
@@ -384,64 +127,61 @@ Invoke-RestMethod -Uri "http://localhost:8000/scrape" -Method Post `
     }
   ],
   "interactions": {
-    "pages": ["https://example.com"],
     "clicks": [],
-    "scrolls": 0
+    "scrolls": 0,
+    "pages": ["https://example.com"]
   },
   "errors": []
 }
 ```
 
-### GET /healthz
-
-**Response:**
-```json
-{
-  "status": "ok"
-}
-```
-
-## 🛠️ Technology Stack
-
-### Backend
-- **FastAPI 0.104.1** - Modern async web framework
-- **Pydantic 2.5.0** - Data validation and serialization
-- **httpx 0.25.1** - Async HTTP client for static scraping
-- **Playwright 1.40.0** - Browser automation for dynamic scraping
-- **BeautifulSoup4 4.12.2** - HTML parsing
-- **lxml 4.9.3** - Fast XML/HTML parser
-- **uvicorn 0.24.0** - ASGI server
-
-### Frontend
-- **React 18** - UI library
-- **Vite 7.2.6** - Build tool
-- **Tailwind CSS v4** - Utility-first styling
-- **shadcn/ui** - Component library
-- **Node.js 22.20.0** - Runtime environment
+---
 
 ## 📝 Known Limitations
 
-1. **Infinite Scroll Detection** - Requires site-specific logic; may not work on all sites
-2. **Content Truncation** - Raw HTML limited to 5000 characters per section
-3. **Image Loading** - External images may not load if CORS restricted
-4. **Rate Limiting** - No built-in rate limiting; may trigger anti-bot measures on some sites
-5. **JavaScript Execution** - Some complex SPAs may require additional wait strategies
-
-## 🔐 Security Considerations
-
-- **URL Validation** - Only http/https protocols allowed
-- **Timeout Protection** - Prevents long-running scrapes
-- **Error Handling** - Graceful degradation with error reporting
-- **CORS Headers** - Configured for frontend-backend communication
-
-## 📄 License
-
-This project is created for the LyftrAI assignment evaluation.
-
-## 👤 Author
-
-Built for LyftrAI Assignment Submission
+1. **Anti-bot Protection** - Sites with aggressive bot detection may block requests
+2. **Content Truncation** - Raw HTML limited to 5000 chars per section
+3. **Infinite Scroll** - May not work on all implementations (site-specific)
+4. **Rate Limiting** - No built-in rate limiting; use responsibly
+5. **Complex SPAs** - Some React/Vue apps may need additional wait strategies
 
 ---
 
-**Last Updated:** December 5, 2025
+## 🛠️ Troubleshooting
+
+### Playwright Errors
+```bash
+playwright install chromium
+playwright install-deps  # Linux only
+```
+
+### Frontend Not Building
+```bash
+cd frontend
+rm -rf node_modules package-lock.json
+npm install
+npm run build
+```
+
+### Port 8000 Already in Use
+```bash
+# Kill process on port 8000
+# Windows: netstat -ano | findstr :8000
+# Linux/Mac: lsof -ti:8000 | xargs kill
+```
+
+---
+
+## 🔧 Tech Stack
+
+**Backend:** FastAPI, Pydantic, httpx, Playwright, BeautifulSoup4  
+**Frontend:** React, Vite, Tailwind CSS v4, shadcn/ui  
+**Runtime:** Python 3.11+, Node.js 22.x+
+
+---
+
+## 📖 Documentation
+
+- **design_notes.md** - Implementation strategy and decisions
+- **ARCHITECTURE.md** - Detailed technical architecture and optimizations
+- **capabilities.json** - Feature flags and supported capabilities
