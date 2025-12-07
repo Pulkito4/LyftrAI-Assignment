@@ -1,9 +1,10 @@
 """
 Interaction handling - clicks, scrolls, and pagination for depth >= 3
 """
-from typing import List, Tuple
-from playwright.async_api import Page, TimeoutError as PlaywrightTimeout, Error as PlaywrightError
 import asyncio
+from typing import List, Tuple
+
+from playwright.async_api import Page, TimeoutError as PlaywrightTimeout, Error as PlaywrightError
 
 from backend.config import (
     MAX_INTERACTION_DEPTH as MAX_DEPTH,
@@ -34,8 +35,8 @@ async def try_click_tabs(page: Page) -> List[str]:
             if not tabs:
                 continue
             
-            # Click each tab (up to 5)
-            for i, tab in enumerate(tabs[:5]):
+            # Click each tab (up to MAX_DEPTH)
+            for i, tab in enumerate(tabs[:MAX_DEPTH]):
                 try:
                     # Check if tab is visible and enabled
                     is_visible = await tab.is_visible()
@@ -169,7 +170,7 @@ async def try_infinite_scroll(page: Page, max_scrolls: int = MAX_DEPTH) -> int:
             
             # Optional: Wait for network to be idle
             try:
-                await page.wait_for_load_state('networkidle', timeout=3000)
+                await page.wait_for_load_state('networkidle', timeout=INTERACTION_TIMEOUT)
             except PlaywrightTimeout:
                 pass
             

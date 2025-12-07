@@ -4,8 +4,8 @@ Main scraping orchestrator - coordinates static and dynamic scraping with fallba
 from datetime import datetime
 
 from backend.models import ScrapeResult, ScrapeError, Meta, Interactions
-from backend.scraper.static import scrape_static
 from backend.scraper.dynamic import scrape_dynamic
+from backend.scraper.static import scrape_static
 from backend.scraper.utils import validate_url, check_robots_txt
 
 

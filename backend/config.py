@@ -9,23 +9,25 @@ HOST = "0.0.0.0"
 PORT = 8000
 
 # Scraping Timeouts (in seconds)
-STATIC_TIMEOUT = 5
-PLAYWRIGHT_TIMEOUT = 45
-GLOBAL_TIMEOUT = 60
+STATIC_TIMEOUT = 10.0  # HTTP client timeout for static scraping
+ROBOTS_TXT_TIMEOUT = 5.0  # Timeout for fetching robots.txt
 PAGE_LOAD_TIMEOUT = 30000  # Playwright page load timeout in milliseconds
 NETWORK_IDLE_TIMEOUT = 5000  # Wait for network idle in milliseconds
+SELECTOR_WAIT_TIMEOUT = 2000  # Wait for specific selectors in milliseconds
 
 # Content Thresholds
 MIN_CONTENT_LENGTH = 500  # Minimum content length to consider JS rendering unnecessary
+MIN_SEMANTIC_CONTENT_LENGTH = 2000  # Minimum content for high script count tolerance
+MAX_SCRIPT_COUNT_THRESHOLD = 20  # Maximum scripts before requiring more content
 MAX_RAW_HTML_LENGTH = 5000  # Maximum length of raw HTML to store per section
 MAX_INTERACTION_DEPTH = 3  # Maximum depth for pagination/scrolls/clicks
 
-# Interaction Limits
-MAX_TAB_CLICKS = 5
-MAX_LOAD_MORE_CLICKS = 3
-MAX_INFINITE_SCROLLS = 3
-MAX_PAGINATION_PAGES = 3
-SCROLL_WAIT_TIME = 2  # Seconds to wait after scrolling
+# Browser Configuration
+VIEWPORT_WIDTH = 1920
+VIEWPORT_HEIGHT = 1080
+
+# Main Content Selectors for Dynamic Waiting
+MAIN_CONTENT_SELECTORS = ['main', 'article', '[role="main"]', '#content', '.content']
 
 # HTTP Headers
 USER_AGENT = (
@@ -69,15 +71,6 @@ JS_REQUIRED_PHRASES = [
     "javascript is not enabled",
 ]
 
-# Landmark Tags for Section Grouping
-LANDMARK_TAGS = ["header", "nav", "main", "article", "section", "aside", "footer"]
-
-# Heading Tags
-HEADING_TAGS = ["h1", "h2", "h3", "h4", "h5", "h6"]
-
-# List Tags
-LIST_TAGS = ["ul", "ol"]
-
 # Interactive Elements for Interaction Detection
 INTERACTIVE_SELECTORS = {
     "tabs": [
@@ -100,6 +93,17 @@ INTERACTIVE_SELECTORS = {
         "[class*='next']",
         "[class*='pagination'] a",
     ],
+}
+
+# Section Type Classification Keywords
+SECTION_TYPE_KEYWORDS = {
+    'hero': ['hero', 'banner', 'jumbotron', 'splash'],
+    'nav': ['nav', 'navigation', 'menu'],
+    'footer': ['footer', 'copyright'],
+    'pricing': ['pricing', 'price', 'plan'],
+    'faq': ['faq', 'question', 'answer', 'accordion'],
+    'list': ['list', 'items'],
+    'grid': ['grid', 'gallery', 'cards'],
 }
 
 # Frontend Static File Path

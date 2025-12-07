@@ -2,10 +2,20 @@
 Utility functions for scraping operations
 """
 import re
-import httpx
-from urllib.parse import urlparse, urljoin
-from urllib.robotparser import RobotFileParser
 from typing import Tuple
+from urllib.parse import urlparse
+from urllib.robotparser import RobotFileParser
+
+import httpx
+from bs4 import BeautifulSoup
+
+from backend.config import (
+    JS_REQUIRED_PHRASES, 
+    MIN_CONTENT_LENGTH, 
+    ROBOTS_TXT_TIMEOUT,
+    MIN_SEMANTIC_CONTENT_LENGTH,
+    MAX_SCRIPT_COUNT_THRESHOLD
+)
 
 
 async def check_robots_txt(url: str, user_agent: str = "*") -> Tuple[bool, str]:
@@ -24,7 +34,7 @@ async def check_robots_txt(url: str, user_agent: str = "*") -> Tuple[bool, str]:
         robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
         
         # Fetch robots.txt with timeout
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=ROBOTS_TXT_TIMEOUT) as client:
             try:
                 response = await client.get(robots_url)
                 if response.status_code == 404:
@@ -80,73 +90,6 @@ def validate_url(url: str) -> Tuple[bool, str]:
         return False, f"Invalid URL: {str(e)}"
 
 
-def get_content_length(html: str) -> int:
-    """
-    Get approximate text content length from HTML.
-    Used for heuristic to determine if JS rendering is needed.
-    """
-    from bs4 import BeautifulSoup
-    
-    soup = BeautifulSoup(html, 'lxml')
-    
-    # Remove script and style tags
-    for tag in soup.find_all(['script', 'style', 'noscript']):
-        tag.decompose()
-    
-    text = soup.get_text(separator=' ', strip=True)
-    # Clean whitespace
-    text = re.sub(r'\s+', ' ', text)
-    
-    return len(text)
-
-
-def has_main_content_marker(html: str) -> bool:
-    """
-    Check if HTML has semantic content markers like <main> or <article>.
-    Used in heuristic for JS rendering decision.
-    """
-    from bs4 import BeautifulSoup
-    
-    soup = BeautifulSoup(html, 'lxml')
-    
-    # Check for main content tags
-    if soup.find('main') or soup.find('article'):
-        return True
-    
-    # Check for role="main"
-    if soup.find(attrs={'role': 'main'}):
-        return True
-    
-    return False
-
-
-# Phrases that indicate JavaScript is required
-JS_REQUIRED_PHRASES = [
-    'enable javascript',
-    'please enable javascript',
-    'javascript is required',
-    'javascript is disabled',
-    'requires javascript',
-    'loading...',
-    'just a moment',
-    'checking your browser',
-    'please wait',
-    'redirecting...',
-]
-
-
-def has_js_required_message(html: str) -> bool:
-    """
-    Check if page contains messages indicating JavaScript is required.
-    """
-    from bs4 import BeautifulSoup
-    
-    soup = BeautifulSoup(html, 'lxml')
-    text = soup.get_text().lower()
-    
-    return any(phrase in text for phrase in JS_REQUIRED_PHRASES)
-
-
 def needs_js_rendering(html: str) -> bool:
     """
     Heuristic to determine if page needs JavaScript rendering.
@@ -159,27 +102,33 @@ def needs_js_rendering(html: str) -> bool:
     
     Returns True if Playwright should be used.
     """
-    # Check for JS required messages first
-    if has_js_required_message(html):
+    soup = BeautifulSoup(html, 'lxml')
+    
+    # Check for JS required messages
+    text = soup.get_text().lower()
+    if any(phrase in text for phrase in JS_REQUIRED_PHRASES):
         return True
     
+    # Remove script and style tags for content analysis
+    for tag in soup.find_all(['script', 'style', 'noscript']):
+        tag.decompose()
+    
     # Get content length
-    content_length = get_content_length(html)
+    clean_text = soup.get_text(separator=' ', strip=True)
+    clean_text = re.sub(r'\s+', ' ', clean_text)
+    content_length = len(clean_text)
     
     # Too little content
-    if content_length < 500:
+    if content_length < MIN_CONTENT_LENGTH:
         return True
     
     # No semantic markers
-    if not has_main_content_marker(html):
+    if not (soup.find('main') or soup.find('article') or soup.find(attrs={'role': 'main'})):
         return True
     
     # Check script-to-content ratio
-    from bs4 import BeautifulSoup
-    soup = BeautifulSoup(html, 'lxml')
     script_count = len(soup.find_all('script'))
-    
-    if script_count > 20 and content_length < 2000:
+    if script_count > MAX_SCRIPT_COUNT_THRESHOLD and content_length < MIN_SEMANTIC_CONTENT_LENGTH:
         return True
     
     return False

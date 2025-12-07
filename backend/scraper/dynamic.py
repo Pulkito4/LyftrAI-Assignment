@@ -1,26 +1,28 @@
 """
 Dynamic scraping using Playwright for JavaScript-rendered pages
 """
-from typing import Optional
-from datetime import datetime
 import asyncio
+from datetime import datetime
+from typing import Optional
 
 from playwright.async_api import async_playwright, Browser, TimeoutError as PlaywrightTimeout
 
+from backend.config import (
+    PAGE_LOAD_TIMEOUT, 
+    NETWORK_IDLE_TIMEOUT, 
+    USER_AGENT, 
+    SELECTOR_WAIT_TIMEOUT, 
+    VIEWPORT_WIDTH, 
+    VIEWPORT_HEIGHT,
+    MAIN_CONTENT_SELECTORS,
+)
 from backend.models import ScrapeResult, Meta, ScrapeError, Interactions
-from backend.scraper.parser import parse_html
-from backend.scraper.static import extract_meta
 from backend.scraper.interactions import handle_interactions
-
-
-# Timeouts for Playwright operations
-PLAYWRIGHT_TIMEOUT = 30000  # 30 seconds for page load
-PLAYWRIGHT_WAIT_TIMEOUT = 5000  # 5 seconds for wait operations
+from backend.scraper.parser import parse_html, extract_meta
 
 
 async def scrape_dynamic(
-    url: str, 
-    interactions_data: Optional[Interactions] = None,
+    url: str,
     enable_interactions: bool = False,
     interaction_strategy: str = 'auto'
 ) -> Optional[ScrapeResult]:
@@ -37,7 +39,6 @@ async def scrape_dynamic(
     
     Args:
         url: The URL to scrape
-        interactions_data: Optional Interactions object from previous steps
         enable_interactions: Whether to handle interactions (clicks, scrolls, pagination)
         interaction_strategy: Strategy for interactions ('auto', 'tabs', 'load_more', 'scroll', 'pagination', 'all')
     
@@ -47,9 +48,6 @@ async def scrape_dynamic(
     errors = []
     pages_visited = [url]
     
-    if interactions_data:
-        pages_visited = interactions_data.pages
-    
     browser: Optional[Browser] = None
     
     try:
@@ -58,8 +56,8 @@ async def scrape_dynamic(
             try:
                 browser = await p.chromium.launch(headless=True)
                 context = await browser.new_context(
-                    viewport={'width': 1920, 'height': 1080},
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    viewport={'width': VIEWPORT_WIDTH, 'height': VIEWPORT_HEIGHT},
+                    user_agent=USER_AGENT
                 )
                 page = await context.new_page()
             except Exception as e:
@@ -71,7 +69,7 @@ async def scrape_dynamic(
             
             # Navigate to URL
             try:
-                response = await page.goto(url, wait_until='domcontentloaded', timeout=PLAYWRIGHT_TIMEOUT)
+                response = await page.goto(url, wait_until='domcontentloaded', timeout=PAGE_LOAD_TIMEOUT)
                 
                 if response and not response.ok:
                     errors.append(ScrapeError(
@@ -85,7 +83,7 @@ async def scrape_dynamic(
                 
             except PlaywrightTimeout:
                 errors.append(ScrapeError(
-                    message=f"Page load timed out after {PLAYWRIGHT_TIMEOUT/1000}s",
+                    message=f"Page load timed out after {PAGE_LOAD_TIMEOUT/1000}s",
                     phase="dynamic"
                 ))
                 # Continue anyway - partial content may be useful
@@ -101,19 +99,18 @@ async def scrape_dynamic(
             # Wait strategy: Multiple approaches
             try:
                 # 1. Wait for network to be idle
-                await page.wait_for_load_state('networkidle', timeout=PLAYWRIGHT_WAIT_TIMEOUT)
+                await page.wait_for_load_state('networkidle', timeout=NETWORK_IDLE_TIMEOUT)
             except PlaywrightTimeout:
                 pass  # Continue - not critical
             
             try:
                 # 2. Wait for common content selectors
-                await page.wait_for_selector('body', timeout=PLAYWRIGHT_WAIT_TIMEOUT)
+                await page.wait_for_selector('body', timeout=NETWORK_IDLE_TIMEOUT)
                 
                 # Try to wait for main content areas
-                selectors_to_try = ['main', 'article', '[role="main"]', '#content', '.content']
-                for selector in selectors_to_try:
+                for selector in MAIN_CONTENT_SELECTORS:
                     try:
-                        await page.wait_for_selector(selector, timeout=2000)
+                        await page.wait_for_selector(selector, timeout=SELECTOR_WAIT_TIMEOUT)
                         break
                     except PlaywrightTimeout:
                         continue
@@ -186,7 +183,7 @@ async def scrape_dynamic(
                 pages=pages_visited
             )
         else:
-            interactions = interactions_data or Interactions(
+            interactions = Interactions(
                 clicks=[],
                 scrolls=0,
                 pages=pages_visited
@@ -214,29 +211,7 @@ async def scrape_dynamic(
         if browser:
             try:
                 await browser.close()
-            except:
+            except Exception:
                 pass
         
         return None
-
-
-def scrape_dynamic_sync(
-    url: str, 
-    interactions_data: Optional[Interactions] = None,
-    enable_interactions: bool = False,
-    interaction_strategy: str = 'auto'
-) -> Optional[ScrapeResult]:
-    """
-    Synchronous wrapper for dynamic scraping.
-    """
-    import asyncio
-    
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    return loop.run_until_complete(
-        scrape_dynamic(url, interactions_data, enable_interactions, interaction_strategy)
-    )

@@ -2,40 +2,73 @@
 Unified HTML parser - converts raw HTML into structured Section objects.
 This parser is used by both static (httpx) and dynamic (Playwright) scrapers.
 """
-from bs4 import BeautifulSoup, Tag
-from urllib.parse import urljoin
 import re
+from urllib.parse import urljoin
 
-from backend.models import Section, Content, LinkItem, ImageItem
+from bs4 import BeautifulSoup, Tag
+
+from backend.models import Section, Content, LinkItem, ImageItem, Meta
+from backend.config import (
+    MAX_RAW_HTML_LENGTH, 
+    NOISE_SELECTORS, 
+    SECTION_TYPE_KEYWORDS,
+)
 
 
-# Maximum character count for rawHtml before truncation
-MAX_RAW_HTML_LENGTH = 5000
-
-# Common noise selectors to remove
-NOISE_SELECTORS = [
-    # Cookie banners
-    '#cookie-consent', '.cookie-banner', '.cookie-notice', '[class*="cookie"]',
-    # Modals and overlays
-    '.modal', '[role="dialog"]', '.overlay', '.popup',
-    # Newsletter popups
-    '.newsletter-popup', '.subscribe-popup',
-    # Ads
-    '.ad', '.advertisement', '[class*="ad-"]', '#ad-container',
-    # Social media widgets (often noisy)
-    '.social-share', '.social-widget',
-]
-
-# Section type keywords for classification
-SECTION_TYPE_KEYWORDS = {
-    'hero': ['hero', 'banner', 'jumbotron', 'splash'],
-    'nav': ['nav', 'navigation', 'menu'],
-    'footer': ['footer', 'copyright'],
-    'pricing': ['pricing', 'price', 'plan'],
-    'faq': ['faq', 'question', 'answer', 'accordion'],
-    'list': ['list', 'items'],
-    'grid': ['grid', 'gallery', 'cards'],
-}
+def extract_meta(html: str, url: str) -> Meta:
+    """
+    Extract metadata from HTML (title, description, language, canonical).
+    """
+    soup = BeautifulSoup(html, 'lxml')
+    
+    # Title - try multiple sources
+    title = ""
+    title_tag = soup.find('title')
+    if title_tag:
+        title = title_tag.get_text(strip=True)
+    
+    # Try og:title if no title
+    if not title:
+        og_title = soup.find('meta', property='og:title')
+        if og_title:
+            title = og_title.get('content', '').strip()
+    
+    if not title:   
+        title = "Untitled"
+    
+    # Description
+    description = ""
+    desc_tag = soup.find('meta', attrs={'name': 'description'})
+    if desc_tag:
+        description = desc_tag.get('content', '').strip()
+    
+    # Try og:description
+    if not description:
+        og_desc = soup.find('meta', property='og:description')
+        if og_desc:
+            description = og_desc.get('content', '').strip()
+    
+    if not description:
+        description = ""
+    
+    # Language - from html lang attribute
+    language = "en"  # Default
+    html_tag = soup.find('html')
+    if html_tag and html_tag.get('lang'):
+        language = html_tag.get('lang', 'en').strip().split('-')[0]  # Get base language
+    
+    # Canonical URL
+    canonical = None
+    canonical_tag = soup.find('link', rel='canonical')
+    if canonical_tag and canonical_tag.get('href'):
+        canonical = canonical_tag.get('href').strip()
+    
+    return Meta(
+        title=title,
+        description=description,
+        language=language,
+        canonical=canonical
+    )
 
 
 def clean_html(soup: BeautifulSoup) -> None:

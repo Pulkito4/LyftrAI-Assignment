@@ -4,16 +4,16 @@ FastAPI application for web scraping service.
 This module provides the main API endpoints for scraping websites
 with intelligent static/dynamic fallback and interaction handling.
 """
-from pathlib import Path
 import mimetypes
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
-from backend.models import ScrapeRequestExtended, ScrapeResult
 from backend.config import HOST, PORT, FRONTEND_DIST_PATH
+from backend.models import ScrapeRequestExtended, ScrapeResult
 
 # Fix MIME type for JavaScript files
 mimetypes.add_type('application/javascript', '.js')
