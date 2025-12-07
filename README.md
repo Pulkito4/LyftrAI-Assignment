@@ -183,5 +183,5 @@ npm run build
 ## 📖 Documentation
 
 - **design_notes.md** - Implementation strategy and decisions
-- **ARCHITECTURE.md** - Detailed technical architecture and optimizations
+- **ARCHITECTURE.md** - Key design decisions (Monolith, Pydantic, Async, EAFP)
 - **capabilities.json** - Feature flags and supported capabilities
