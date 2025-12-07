@@ -21,47 +21,31 @@ def extract_meta(html: str, url: str) -> Meta:
     """
     soup = BeautifulSoup(html, 'lxml')
     
-    # Title - try multiple sources
-    title = ""
-    title_tag = soup.find('title')
-    if title_tag:
-        title = title_tag.get_text(strip=True)
+    try:
+        title = soup.find('title').get_text(strip=True)
+    except (AttributeError, TypeError):
+        try:
+            title = soup.find('meta', property='og:title')['content'].strip()
+        except (AttributeError, TypeError, KeyError):
+            title = "Untitled"
     
-    # Try og:title if no title
-    if not title:
-        og_title = soup.find('meta', property='og:title')
-        if og_title:
-            title = og_title.get('content', '').strip()
+    try:
+        description = soup.find('meta', attrs={'name': 'description'})['content'].strip()
+    except (AttributeError, TypeError, KeyError):
+        try:
+            description = soup.find('meta', property='og:description')['content'].strip()
+        except (AttributeError, TypeError, KeyError):
+            description = ""
     
-    if not title:   
-        title = "Untitled"
+    try:
+        language = soup.find('html')['lang'].strip().split('-')[0]
+    except (AttributeError, TypeError, KeyError):
+        language = "en"
     
-    # Description
-    description = ""
-    desc_tag = soup.find('meta', attrs={'name': 'description'})
-    if desc_tag:
-        description = desc_tag.get('content', '').strip()
-    
-    # Try og:description
-    if not description:
-        og_desc = soup.find('meta', property='og:description')
-        if og_desc:
-            description = og_desc.get('content', '').strip()
-    
-    if not description:
-        description = ""
-    
-    # Language - from html lang attribute
-    language = "en"  # Default
-    html_tag = soup.find('html')
-    if html_tag and html_tag.get('lang'):
-        language = html_tag.get('lang', 'en').strip().split('-')[0]  # Get base language
-    
-    # Canonical URL
-    canonical = None
-    canonical_tag = soup.find('link', rel='canonical')
-    if canonical_tag and canonical_tag.get('href'):
-        canonical = canonical_tag.get('href').strip()
+    try:
+        canonical = soup.find('link', rel='canonical')['href'].strip()
+    except (AttributeError, TypeError, KeyError):
+        canonical = None
     
     return Meta(
         title=title,

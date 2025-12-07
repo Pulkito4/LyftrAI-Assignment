@@ -59,52 +59,31 @@ async def scrape_url(
             errors=[ScrapeError(message=robots_msg, phase="validation")]
         )
     
-    # Add robots.txt check result as info
-    if "allows" in robots_msg.lower():
-        errors.append(ScrapeError(message=robots_msg, phase="validation"))
-    
     try:
-        # Step 1: Try static scraping first
         static_result, needs_js = await scrape_static(url)
         
         if static_result and not needs_js:
-            # Static scraping succeeded and content is sufficient
             return static_result
         
-        # Step 2: Static failed or needs JS - use Playwright
-        if needs_js or static_result is None:
-            # Add info about fallback
-            if needs_js:
-                errors.append(ScrapeError(
-                    message="Static HTML insufficient - using JavaScript rendering",
-                    phase="fallback"
-                ))
-            
-            dynamic_result = await scrape_dynamic(
-                url, 
-                enable_interactions=enable_interactions,
-                interaction_strategy=interaction_strategy
-            )
-            
-            if dynamic_result:
-                # Merge any errors from static attempt
-                dynamic_result.errors.extend(errors)
-                return dynamic_result
-            
-            # Both failed - return whatever we have
-            if static_result:
-                errors.append(ScrapeError(
-                    message="Dynamic scraping failed - returning static result",
-                    phase="fallback"
-                ))
-                static_result.errors.extend(errors)
-                return static_result
-            
-            # Complete failure
+        if needs_js:
             errors.append(ScrapeError(
-                message="Both static and dynamic scraping failed",
-                phase="scraping"
+                message="Static HTML insufficient - using JavaScript rendering",
+                phase="fallback"
             ))
+        
+        dynamic_result = await scrape_dynamic(
+            url, 
+            enable_interactions=enable_interactions,
+            interaction_strategy=interaction_strategy
+        )
+        
+        if dynamic_result:
+            dynamic_result.errors.extend(errors)
+            return dynamic_result
+        
+        if static_result:
+            static_result.errors.extend(errors)
+            return static_result
     
     except Exception as e:
         errors.append(ScrapeError(
@@ -112,7 +91,6 @@ async def scrape_url(
             phase="orchestration"
         ))
     
-    # Return error result
     return ScrapeResult(
         url=url,
         scrapedAt=datetime.utcnow().isoformat() + "Z",

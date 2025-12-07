@@ -67,7 +67,6 @@ async def scrape_dynamic(
                 ))
                 return None
             
-            # Navigate to URL
             try:
                 response = await page.goto(url, wait_until='domcontentloaded', timeout=PAGE_LOAD_TIMEOUT)
                 
@@ -92,8 +91,10 @@ async def scrape_dynamic(
                     message=f"Navigation failed: {str(e)}",
                     phase="dynamic"
                 ))
-                if browser:
+                try:
                     await browser.close()
+                except Exception:
+                    pass
                 return None
             
             # Wait strategy: Multiple approaches
@@ -207,11 +208,9 @@ async def scrape_dynamic(
             phase="dynamic"
         ))
         
-        # Try to close browser if still open
-        if browser:
-            try:
-                await browser.close()
-            except Exception:
-                pass
+        try:
+            await browser.close()
+        except Exception:
+            pass
         
         return None

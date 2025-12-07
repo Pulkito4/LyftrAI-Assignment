@@ -32,34 +32,19 @@ async def try_click_tabs(page: Page) -> List[str]:
         try:
             tabs = await page.query_selector_all(selector)
             
-            if not tabs:
+            if len(tabs) == 0:
                 continue
             
-            # Click each tab (up to MAX_DEPTH)
-            for i, tab in enumerate(tabs[:MAX_DEPTH]):
+            for tab in tabs[:MAX_DEPTH]:
                 try:
-                    # Check if tab is visible and enabled
-                    is_visible = await tab.is_visible()
-                    is_enabled = await tab.is_enabled()
-                    
-                    if not is_visible or not is_enabled:
-                        continue
-                    
-                    # Get tab text for description
-                    text = await tab.inner_text()
-                    text = text.strip()[:50]  # Truncate
-                    
-                    # Click the tab
+                    # Just try to click - if not visible/enabled, will fail naturally
+                    text = (await tab.inner_text()).strip()[:50]
                     await tab.click(timeout=INTERACTION_TIMEOUT)
                     clicks.append(f"Tab clicked: {selector} - {text}")
-                    
-                    # Wait for content to load
                     await asyncio.sleep(0.5)
-                    
-                except (PlaywrightTimeout, PlaywrightError):
+                except (PlaywrightTimeout, PlaywrightError, AttributeError):
                     continue
             
-            # If we found and clicked tabs, no need to try other selectors
             if clicks:
                 break
                 
@@ -86,50 +71,27 @@ async def try_click_load_more(page: Page, max_clicks: int = MAX_DEPTH) -> Tuple[
     for attempt in range(max_clicks):
         clicked = False
         
-        # Try each selector
         for selector in LOAD_MORE_SELECTORS:
             try:
-                # Check if button exists and is visible
                 button = await page.query_selector(selector)
+                text = (await button.inner_text()).strip()[:50]
+                len_before = len(await page.content())
                 
-                if not button:
-                    continue
-                
-                is_visible = await button.is_visible()
-                if not is_visible:
-                    continue
-                
-                # Get button text
-                text = await button.inner_text()
-                text = text.strip()[:50]
-                
-                # Get current content length (to detect if new content loaded)
-                content_before = await page.content()
-                len_before = len(content_before)
-                
-                # Click the button
                 await button.click(timeout=INTERACTION_TIMEOUT)
                 clicks.append(f"Load more clicked ({attempt + 1}): {text}")
                 click_count += 1
                 clicked = True
                 
-                # Wait for new content to load
                 await asyncio.sleep(2)
                 
                 # Check if content actually changed
-                content_after = await page.content()
-                len_after = len(content_after)
-                
-                if len_after <= len_before:
-                    # No new content, stop trying
+                if len(await page.content()) <= len_before:
                     return clicks, click_count
                 
-                break  # Successfully clicked, go to next attempt
-                
-            except (PlaywrightTimeout, PlaywrightError):
+                break
+            except (PlaywrightTimeout, PlaywrightError, AttributeError, TypeError):
                 continue
         
-        # If no button was clicked this round, we're done
         if not clicked:
             break
     
@@ -194,51 +156,31 @@ async def try_pagination(page: Page, max_pages: int = MAX_DEPTH) -> Tuple[List[s
     pages_visited = [page.url]
     pages_count = 1
     
-    for attempt in range(max_pages - 1):  # -1 because we're already on page 1
+    for attempt in range(max_pages - 1):
         clicked = False
         
-        # Try each pagination selector
         for selector in PAGINATION_SELECTORS:
             try:
-                # Find next button/link
                 next_button = await page.query_selector(selector)
-                
-                if not next_button:
-                    continue
-                
-                is_visible = await next_button.is_visible()
-                if not is_visible:
-                    continue
-                
-                # Get current URL to detect if it changes
                 url_before = page.url
                 
-                # Click next
                 await next_button.click(timeout=INTERACTION_TIMEOUT)
                 
-                # Wait for navigation
                 try:
                     await page.wait_for_load_state('domcontentloaded', timeout=INTERACTION_TIMEOUT)
                 except PlaywrightTimeout:
-                    await asyncio.sleep(1)  # Give it a moment anyway
+                    await asyncio.sleep(1)
                 
-                # Check if URL changed
                 url_after = page.url
-                
                 if url_after != url_before and url_after not in pages_visited:
                     pages_visited.append(url_after)
                     pages_count += 1
                     clicked = True
-                    
-                    # Wait a bit for content to load
                     await asyncio.sleep(1)
-                    
-                    break  # Successfully navigated, try next page
-                
-            except (PlaywrightTimeout, PlaywrightError):
+                    break
+            except (PlaywrightTimeout, PlaywrightError, AttributeError, TypeError):
                 continue
         
-        # If no pagination link worked, we're done
         if not clicked:
             break
     

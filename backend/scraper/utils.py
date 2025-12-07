@@ -76,16 +76,14 @@ def validate_url(url: str) -> Tuple[bool, str]:
     
     url = url.strip()
     
-    # Check scheme
     if not url.startswith(('http://', 'https://')):
         return False, "Only http:// and https:// URLs are supported"
     
-    # Parse URL
     try:
         parsed = urlparse(url)
-        if not parsed.netloc:
-            return False, "Invalid URL format"
-        return True, ""
+        # Just try to access netloc - will work if valid
+        _ = parsed.netloc
+        return (True, "") if parsed.netloc else (False, "Invalid URL format")
     except Exception as e:
         return False, f"Invalid URL: {str(e)}"
 
