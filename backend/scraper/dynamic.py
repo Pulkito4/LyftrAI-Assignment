@@ -81,8 +81,8 @@ async def scrape_dynamic(
                         ScrapeError(
                             message=f"HTTP {response.status}: Page load failed",
                             phase="dynamic",
+                        )
                     )
-                )
 
                 pages_visited.append(page.url)
 
@@ -176,28 +176,36 @@ async def scrape_dynamic(
 
         # Extract metadata from final page
         try:
-            meta = extract_meta(html, final_url)
+            meta = extract_meta(html, final_url, strategy="js")
         except Exception as e:
             errors.append(
                 ScrapeError(
                     message=f"Failed to extract metadata: {str(e)}", phase="parsing"
                 )
             )
-            meta = Meta(title="Error", description="", language="en", canonical=None)
+            meta = Meta(title="Error", description="", language="en", canonical=None, strategy="js")
 
         # Parse HTML into sections
         sections = []
-        
+
         # If we have multiple HTML contents from pagination, parse all of them
         if enable_interactions and html_contents:
             try:
                 for i, page_html in enumerate(html_contents):
                     page_url = pages_visited[i] if i < len(pages_visited) else final_url
                     page_sections = parse_html(page_html, page_url)
+                    
+                    # Ensure unique IDs across pages by appending page index
+                    for section in page_sections:
+                        section.id = f"{section.id}-p{i}"
+                        
                     sections.extend(page_sections)
             except Exception as e:
                 errors.append(
-                    ScrapeError(message=f"Failed to parse paginated HTML: {str(e)}", phase="parsing")
+                    ScrapeError(
+                        message=f"Failed to parse paginated HTML: {str(e)}",
+                        phase="parsing",
+                    )
                 )
         else:
             # Single page - parse the current HTML
@@ -205,7 +213,9 @@ async def scrape_dynamic(
                 sections = parse_html(html, final_url)
             except Exception as e:
                 errors.append(
-                    ScrapeError(message=f"Failed to parse HTML: {str(e)}", phase="parsing")
+                    ScrapeError(
+                        message=f"Failed to parse HTML: {str(e)}", phase="parsing"
+                    )
                 )
                 sections = []
 

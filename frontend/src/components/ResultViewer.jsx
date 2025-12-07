@@ -40,7 +40,7 @@ function ResultViewer({ result }) {
             </span>
             <span className="bg-secondary px-3 py-1.5 rounded-lg text-sm font-medium text-secondary-foreground flex items-center gap-2">
               <MousePointer className="w-4 h-4" />
-              {result.interactions.clicks.length} clicks
+              {Array.isArray(result.interactions.clicks) ? result.interactions.clicks.length : 0} clicks
             </span>
             <span className="bg-secondary px-3 py-1.5 rounded-lg text-sm font-medium text-secondary-foreground flex items-center gap-2">
               <ArrowDown className="w-4 h-4" />
@@ -114,7 +114,7 @@ function ResultViewer({ result }) {
                 <MousePointer className="w-5 h-5 text-primary" />
                 <h3 className="text-muted-foreground text-sm font-medium">Clicks Performed</h3>
               </div>
-              <p className="text-3xl font-bold text-primary">{result.interactions.clicks}</p>
+              <p className="text-3xl font-bold text-primary">{Array.isArray(result.interactions.clicks) ? result.interactions.clicks.length : 0}</p>
             </Card>
             
             <Card className="bg-card border-border p-6">

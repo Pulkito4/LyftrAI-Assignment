@@ -2,14 +2,13 @@
 Interaction handling - clicks, scrolls, and pagination for depth >= 3
 """
 
-import asyncio
 from typing import List, Tuple
-
 from playwright.async_api import (
     Page,
     TimeoutError as PlaywrightTimeout,
     Error as PlaywrightError,
 )
+import asyncio
 
 from backend.config import (
     MAX_INTERACTION_DEPTH as MAX_DEPTH,
@@ -37,19 +36,34 @@ async def try_click_tabs(page: Page) -> List[str]:
         try:
             tabs = await page.query_selector_all(selector)
 
-            if len(tabs) == 0:
+            if not tabs:
                 continue
 
-            for tab in tabs[:MAX_DEPTH]:
+            # Click each tab (up to 5)
+            for i, tab in enumerate(tabs[:5]):
                 try:
-                    # Just try to click - if not visible/enabled, will fail naturally
-                    text = (await tab.inner_text()).strip()[:50]
+                    # Check if tab is visible and enabled
+                    is_visible = await tab.is_visible()
+                    is_enabled = await tab.is_enabled()
+
+                    if not is_visible or not is_enabled:
+                        continue
+
+                    # Get tab text for description
+                    text = await tab.inner_text()
+                    text = text.strip()[:50]  # Truncate
+
+                    # Click the tab
                     await tab.click(timeout=INTERACTION_TIMEOUT)
                     clicks.append(f"Tab clicked: {selector} - {text}")
+
+                    # Wait for content to load
                     await asyncio.sleep(0.5)
-                except (PlaywrightTimeout, PlaywrightError, AttributeError):
+
+                except (PlaywrightTimeout, PlaywrightError):
                     continue
 
+            # If we found and clicked tabs, no need to try other selectors
             if clicks:
                 break
 
@@ -78,34 +92,59 @@ async def try_click_load_more(
     for attempt in range(max_clicks):
         clicked = False
 
+        # Try each selector
         for selector in LOAD_MORE_SELECTORS:
             try:
+                # Check if button exists and is visible
                 button = await page.query_selector(selector)
-                text = (await button.inner_text()).strip()[:50]
-                len_before = len(await page.content())
 
+                if not button:
+                    continue
+
+                is_visible = await button.is_visible()
+                if not is_visible:
+                    continue
+
+                # Get button text
+                text = await button.inner_text()
+                text = text.strip()[:50]
+
+                # Get current content length (to detect if new content loaded)
+                content_before = await page.content()
+                len_before = len(content_before)
+
+                # Click the button
                 await button.click(timeout=INTERACTION_TIMEOUT)
                 clicks.append(f"Load more clicked ({attempt + 1}): {text}")
                 click_count += 1
                 clicked = True
 
+                # Wait for new content to load
                 await asyncio.sleep(2)
 
                 # Check if content actually changed
-                if len(await page.content()) <= len_before:
+                content_after = await page.content()
+                len_after = len(content_after)
+
+                if len_after <= len_before:
+                    # No new content, stop trying
                     return clicks, click_count
 
-                break
-            except (PlaywrightTimeout, PlaywrightError, AttributeError, TypeError):
+                break  # Successfully clicked, go to next attempt
+
+            except (PlaywrightTimeout, PlaywrightError):
                 continue
 
+        # If no button was clicked this round, we're done
         if not clicked:
             break
 
     return clicks, click_count
 
 
-async def try_infinite_scroll(page: Page, max_scrolls: int = MAX_DEPTH) -> int:
+async def try_infinite_scroll(
+    page: Page, max_scrolls: int = MAX_DEPTH
+) -> Tuple[int, List[str]]:
     """
     Perform infinite scroll by scrolling down and waiting for content to load.
 
@@ -114,17 +153,32 @@ async def try_infinite_scroll(page: Page, max_scrolls: int = MAX_DEPTH) -> int:
         max_scrolls: Maximum number of scroll operations
 
     Returns:
-        Number of successful scrolls
+        (scroll_count, visited_urls)
     """
     scroll_count = 0
+    previous_height = 0
+    visited_urls = []
 
     for attempt in range(max_scrolls):
         try:
-            # Get current scroll height before scrolling
-            height_before = await page.evaluate("() => document.body.scrollHeight")
+            # Get current scroll height
+            current_height = await page.evaluate("() => document.body.scrollHeight")
+
+            # If height hasn't changed from last scroll, no new content
+            if previous_height > 0 and current_height <= previous_height:
+                break
+
+            previous_height = current_height
 
             # Scroll to bottom
             await page.evaluate("() => window.scrollTo(0, document.body.scrollHeight)")
+
+            # Also try pressing End key to trigger some infinite scrolls that rely on keyboard events
+            try:
+                await page.keyboard.press("End")
+            except Exception:
+                pass
+
             scroll_count += 1
 
             # Wait for new content to load
@@ -138,17 +192,15 @@ async def try_infinite_scroll(page: Page, max_scrolls: int = MAX_DEPTH) -> int:
             except PlaywrightTimeout:
                 pass
 
-            # Check if height changed after scrolling
-            height_after = await page.evaluate("() => document.body.scrollHeight")
-            
-            # If height hasn't changed, no new content loaded
-            if height_after <= height_before:
-                break
+            # Check if URL changed (some infinite scrolls update URL)
+            current_url = page.url
+            if current_url not in visited_urls:
+                visited_urls.append(current_url)
 
         except (PlaywrightTimeout, PlaywrightError, Exception):
             break
 
-    return scroll_count
+    return scroll_count, visited_urls
 
 
 async def try_pagination(
@@ -165,47 +217,74 @@ async def try_pagination(
         (pages_visited, pages_count, html_contents)
     """
     pages_visited = [page.url]
-    html_contents = [await page.content()]
     pages_count = 1
+    html_contents = []
 
-    for attempt in range(max_pages - 1):
+    # Capture initial page content
+    try:
+        content = await page.content()
+        html_contents.append(content)
+    except Exception:
+        pass
+
+    for attempt in range(max_pages - 1):  # -1 because we're already on page 1
         clicked = False
 
+        # Try each pagination selector
         for selector in PAGINATION_SELECTORS:
             try:
+                # Find next button/link
                 next_button = await page.query_selector(selector)
+
+                if not next_button:
+                    continue
+
+                is_visible = await next_button.is_visible()
+                if not is_visible:
+                    continue
+
+                # Get current URL to detect if it changes
                 url_before = page.url
 
+                # Click next
                 await next_button.click(timeout=INTERACTION_TIMEOUT)
 
+                # Wait for navigation
                 try:
                     await page.wait_for_load_state(
                         "domcontentloaded", timeout=INTERACTION_TIMEOUT
                     )
                 except PlaywrightTimeout:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(1)  # Give it a moment anyway
 
+                # Check if URL changed
                 url_after = page.url
-                if normalize_url(url_after) != normalize_url(url_before) and \
-                   normalize_url(url_after) not in [normalize_url(u) for u in pages_visited]:
+
+                if url_after != url_before and url_after not in pages_visited:
                     pages_visited.append(url_after)
-                    html_contents.append(await page.content())
                     pages_count += 1
                     clicked = True
+
+                    # Wait a bit for content to load
                     await asyncio.sleep(1)
-                    break
-            except (PlaywrightTimeout, PlaywrightError, AttributeError, TypeError):
+
+                    # Capture new page content
+                    try:
+                        content = await page.content()
+                        html_contents.append(content)
+                    except Exception:
+                        pass
+
+                    break  # Successfully navigated, try next page
+
+            except (PlaywrightTimeout, PlaywrightError):
                 continue
 
+        # If no pagination link worked, we're done
         if not clicked:
             break
 
     return pages_visited, pages_count, html_contents
-
-
-def normalize_url(url: str) -> str:
-    """Normalize URL by removing trailing slash for comparison."""
-    return url.rstrip('/')
 
 
 async def handle_interactions(page: Page, strategy: str = "auto") -> dict:
@@ -227,7 +306,7 @@ async def handle_interactions(page: Page, strategy: str = "auto") -> dict:
             - clicks: List[str] - Descriptions of clicked elements
             - scrolls: int - Number of scroll operations
             - pages: List[str] - URLs visited
-            - html_contents: List[str] - HTML from each page (for pagination)
+            - html_contents: List[str] - HTML content of visited pages
     """
     clicks = []
     scrolls = 0
@@ -247,15 +326,28 @@ async def handle_interactions(page: Page, strategy: str = "auto") -> dict:
 
         if strategy in ["auto", "scroll", "all"]:
             # Try infinite scroll
-            scroll_count = await try_infinite_scroll(page, max_scrolls=MAX_DEPTH)
+            scroll_count, scroll_pages = await try_infinite_scroll(
+                page, max_scrolls=MAX_DEPTH
+            )
             scrolls = scroll_count
 
+            # Add new pages
+            for p in scroll_pages:
+                if p not in pages:
+                    pages.append(p)
+
         if strategy in ["auto", "pagination", "all"]:
-            pagination_pages, _, pagination_html = await try_pagination(page, max_pages=MAX_DEPTH)
-            # Replace pages and html_contents with pagination results
-            if pagination_pages:
-                pages = pagination_pages
-                html_contents = pagination_html
+            # Try pagination (this changes the URL)
+            pagination_pages, _, pagination_htmls = await try_pagination(
+                page, max_pages=MAX_DEPTH
+            )
+            # Add new pages (avoid duplicates)
+            for p in pagination_pages:
+                if p not in pages:
+                    pages.append(p)
+
+            # Add HTML contents
+            html_contents.extend(pagination_htmls)
 
         # For 'auto' strategy, if nothing worked, try everything
         if strategy == "auto" and not clicks and scrolls == 0 and len(pages) == 1:
@@ -263,11 +355,38 @@ async def handle_interactions(page: Page, strategy: str = "auto") -> dict:
             load_more_clicks, _ = await try_click_load_more(page, max_clicks=MAX_DEPTH)
             clicks.extend(load_more_clicks)
 
-            scroll_count = await try_infinite_scroll(page, max_scrolls=MAX_DEPTH)
-            scrolls = max(scrolls, scroll_count)
+            if not clicks:
+                # Try scroll
+                scroll_count, scroll_pages = await try_infinite_scroll(
+                    page, max_scrolls=MAX_DEPTH
+                )
+                scrolls = scroll_count
+                for p in scroll_pages:
+                    if p not in pages:
+                        pages.append(p)
+
+                # If still nothing, try pagination
+                if scrolls == 0:
+                    pagination_pages, _, pagination_htmls = await try_pagination(
+                        page, max_pages=MAX_DEPTH
+                    )
+                    for p in pagination_pages:
+                        if p not in pages:
+                            pages.append(p)
+                    html_contents.extend(pagination_htmls)
 
     except Exception:
         # Don't fail completely on interaction errors
         pass
 
-    return {"clicks": clicks, "scrolls": scrolls, "pages": pages, "html_contents": html_contents}
+    return {
+        "clicks": clicks,
+        "scrolls": scrolls,
+        "pages": pages,
+        "html_contents": html_contents,
+    }
+
+
+def normalize_url(url: str) -> str:
+    "Normalize URL by removing trailing slash for comparison."
+    return url.rstrip("/")

@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import {
   Accordion,
   AccordionContent,
@@ -31,7 +30,7 @@ function SectionList({ sections }) {
   }
 
   return (
-    <Accordion type="multiple" className="space-y-4">
+    <Accordion type="single" collapsible className="space-y-4">
       {sections.map((section) => (
         <AccordionItem 
           key={section.id} 

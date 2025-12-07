@@ -97,41 +97,78 @@ def needs_js_rendering(html: str) -> bool:
     Heuristic to determine if page needs JavaScript rendering.
 
     Triggers JS rendering if:
+    - SPA/CSR framework markers detected (React, Next.js, Vue, etc.)
     - Content length < 500 chars
     - No <main> or <article> tags
     - Contains "enable JavaScript" messages
     - High script-to-content ratio
+    - Heavy bundled scripts with low text ratio
 
     Returns True if Playwright should be used.
     """
     soup = BeautifulSoup(html, "lxml")
 
-    # Check for JS required messages
+    # 1) Check for SPA/CSR framework markers
+    # React/Next.js/Gatsby
+    if soup.find(id="__next") or soup.find(id="___gatsby"):
+        return True
+    if soup.find(attrs={"data-reactroot": True}) or soup.find(attrs={"data-react-helmet": True}):
+        return True
+    # Generic SPA roots
+    if soup.find(id="root") or soup.find(id="app") or soup.find(class_="react-root"):
+        return True
+    # Vue.js
+    if soup.find(id="app", attrs={"data-v-app": True}):
+        return True
+
+    # 2) Check for JS required messages (from noscript or main text)
+    noscripts = " ".join(ns.get_text(" ", strip=True).lower() for ns in soup.find_all("noscript"))
+    if "enable javascript" in noscripts or "without javascript" in noscripts or "javascript is required" in noscripts:
+        return True
+    
     text = soup.get_text().lower()
     if any(phrase in text for phrase in JS_REQUIRED_PHRASES):
         return True
 
-    # Remove script and style tags for content analysis
+    # 3) Analyze script tags before removing them
+    scripts = soup.find_all("script")
+    script_count = len(scripts)
+    
+    # Check for bundled script patterns (webpack, next, vite, etc.)
+    bundler_keywords = ("bundle", "chunk", "webpack", "main.", "next", "app.", "vendor", "_next", "vite")
+    script_srcs = [s.get("src", "") for s in scripts if s.get("src")]
+    has_heavy_bundles = any(any(k in src.lower() for k in bundler_keywords) for src in script_srcs)
+
+    # 4) Remove script and style tags for content analysis
     for tag in soup.find_all(["script", "style", "noscript"]):
         tag.decompose()
 
-    # Get content length
+    # 5) Compute text-to-HTML ratio
     clean_text = soup.get_text(separator=" ", strip=True)
     clean_text = re.sub(r"\s+", " ", clean_text)
     content_length = len(clean_text)
+    html_len = max(len(html), 1)
+    text_ratio = content_length / html_len
 
-    # Too little content
+    # 6) Too little content
     if content_length < MIN_CONTENT_LENGTH:
         return True
 
-    # No semantic markers
+    # 7) No semantic markers
     if not (
         soup.find("main") or soup.find("article") or soup.find(attrs={"role": "main"})
     ):
         return True
 
-    # Check script-to-content ratio
-    script_count = len(soup.find_all("script"))
+    # 8) Heavy JS with low text ratio (likely CSR shell)
+    if has_heavy_bundles and script_count > 10 and text_ratio < 0.03:
+        return True
+    
+    # 9) Very high script count with low text ratio
+    if script_count > 30 and text_ratio < 0.05:
+        return True
+
+    # 10) Original script-to-content ratio check
     if (
         script_count > MAX_SCRIPT_COUNT_THRESHOLD
         and content_length < MIN_SEMANTIC_CONTENT_LENGTH

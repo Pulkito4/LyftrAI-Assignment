@@ -247,18 +247,80 @@ UI_CONFIG = {
 
 ## 📊 API Documentation
 
+### Interactive API Documentation
+
+The FastAPI backend provides interactive API documentation:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
 ### POST /scrape
 
-**Request:**
+#### Request Schema
+
+**Fields:**
+- `url` (string, required) - The URL to scrape
+- `enable_interactions` (boolean, optional, default: `false`) - Enable interaction handling (clicks, scrolls, pagination)
+- `interaction_strategy` (string, optional, default: `"auto"`) - Strategy for handling interactions
+  - `"auto"` - Smart detection and execution of all strategies
+  - `"tabs"` - Focus on clicking tabs
+  - `"load_more"` - Focus on "Load more" buttons
+  - `"scroll"` - Focus on infinite scroll
+  - `"pagination"` - Focus on pagination links
+  - `"all"` - Try everything
+
+#### Example Requests
+
+**Basic Scraping (JSON):**
 ```json
 {
-  "url": "https://example.com",
-  "enableInteractions": true,
-  "interactionStrategy": "auto"
+  "url": "https://example.com"
 }
 ```
 
-**Response:**
+**With Interactions (JSON):**
+```json
+{
+  "url": "https://example.com",
+  "enable_interactions": true,
+  "interaction_strategy": "auto"
+}
+```
+
+**Using cURL:**
+```bash
+# Basic scraping
+curl -X POST http://localhost:8000/scrape \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com"}'
+
+# With interactions enabled
+curl -X POST http://localhost:8000/scrape \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://news.ycombinator.com/",
+    "enable_interactions": true,
+    "interaction_strategy": "pagination"
+  }'
+```
+
+**Using PowerShell:**
+```powershell
+# Basic scraping
+Invoke-RestMethod -Uri "http://localhost:8000/scrape" -Method Post `
+  -Body '{"url": "https://example.com"}' `
+  -ContentType "application/json"
+
+# With interactions enabled
+Invoke-RestMethod -Uri "http://localhost:8000/scrape" -Method Post `
+  -Body '{
+    "url": "https://news.ycombinator.com/",
+    "enable_interactions": true,
+    "interaction_strategy": "pagination"
+  }' `
+  -ContentType "application/json"
+```
+
+#### Response:
 ```json
 {
   "url": "https://example.com",

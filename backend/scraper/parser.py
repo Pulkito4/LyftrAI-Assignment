@@ -6,7 +6,7 @@ This parser is used by both static (httpx) and dynamic (Playwright) scrapers.
 import re
 from urllib.parse import urljoin
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, Tag, NavigableString
 
 from backend.models import Section, Content, LinkItem, ImageItem, Meta
 from backend.config import (
@@ -25,9 +25,14 @@ def _safe_extract(extractor_func, default=""):
         return default
 
 
-def extract_meta(html: str, url: str) -> Meta:
+def extract_meta(html: str, url: str, strategy: str = None) -> Meta:
     """
     Extract metadata from HTML (title, description, language, canonical).
+    
+    Args:
+        html: Raw HTML string
+        url: Source URL
+        strategy: Optional scraping strategy ("static" or "js")
     """
     soup = BeautifulSoup(html, "lxml")
 
@@ -50,7 +55,7 @@ def extract_meta(html: str, url: str) -> Meta:
     )
 
     return Meta(
-        title=title, description=description, language=language, canonical=canonical
+        title=title, description=description, language=language, canonical=canonical, strategy=strategy
     )
 
 
@@ -100,9 +105,9 @@ def classify_section_type(element: Tag) -> str:
 def generate_label(element: Tag, section_type: str) -> str:
     """
     Generate a human-readable label for the section.
-    Uses heading text if available, otherwise first 5-7 words of content.
+    Uses heading text if available, otherwise first 5-7 words of the text.
     """
-    # Try to find a heading
+    # 1. Try to find a heading (h1-h6)
     heading = element.find(["h1", "h2", "h3", "h4", "h5", "h6"])
     if heading:
         text = heading.get_text(strip=True)
@@ -110,21 +115,19 @@ def generate_label(element: Tag, section_type: str) -> str:
             # Truncate to ~50 chars
             return text[:50] + ("..." if len(text) > 50 else "")
 
-    # Try aria-label or title
-    aria_label = element.get("aria-label")
-    if aria_label:
-        return aria_label[:50] + ("..." if len(aria_label) > 50 else "")
-
-    # Get first 5-7 words of text content
-    text = element.get_text(strip=True)
+    # 2. Derive from first 5-7 words of text content
+    # Use get_text with a separator to preserve some structure but avoid duplication
+    text = element.get_text(separator=" ", strip=True)
     if text:
+        # Clean up whitespace
+        text = re.sub(r"\s+", " ", text)
         words = text.split()[:7]
         label = " ".join(words)
         if len(words) >= 7 or len(text) > len(label):
             label += "..."
         return label[:50]
 
-    # Fallback to section type
+    # 3. Fallback to section type
     return f"{section_type.capitalize()} Section"
 
 
@@ -142,22 +145,47 @@ def extract_text(element: Tag) -> str:
     """
     Extract clean text content from the element.
     Removes extra whitespace and joins paragraphs.
+    Skips content inside tables (as they are extracted separately).
+    If the content is mostly links (>60%), returns empty string to avoid redundancy.
     """
-    # Get all text, but preserve paragraph structure
-    texts = []
-    for tag in element.find_all(["p", "div", "span", "li", "td", "th"]):
-        text = tag.get_text(strip=True)
-        if text and text not in texts:  # Avoid duplicates
-            texts.append(text)
+    def get_text_skipping_tags(el, tags_to_skip):
+        texts = []
+        for child in el.children:
+            if isinstance(child, NavigableString):
+                t = child.strip()
+                if t:
+                    texts.append(t)
+            elif isinstance(child, Tag):
+                if child.name in tags_to_skip:
+                    continue
+                texts.append(get_text_skipping_tags(child, tags_to_skip))
+        return " ".join(texts)
 
-    # If no structured text, get all text
-    if not texts:
-        text = element.get_text(separator=" ", strip=True)
-        # Clean up whitespace
-        text = re.sub(r"\s+", " ", text)
-        return text
-
-    return " ".join(texts)
+    # Extract text skipping tables
+    text = get_text_skipping_tags(element, ['table'])
+    
+    # Clean up whitespace
+    text = re.sub(r"\s+", " ", text).strip()
+    
+    if not text:
+        return ""
+        
+    # Check link density
+    # Calculate length of text inside links
+    link_text_len = 0
+    for a in element.find_all("a"):
+        # Only count links that are NOT inside tables (since we already skipped tables)
+        if not a.find_parent("table"):
+            link_text_len += len(a.get_text(strip=True))
+            
+    # Calculate density
+    if len(text) > 0:
+        density = link_text_len / len(text)
+        # If more than 60% of the text is links, it's likely a link list/nav
+        if density > 0.6:
+            return ""
+            
+    return text
 
 
 def extract_links(element: Tag, base_url: str) -> list[LinkItem]:
@@ -332,7 +360,7 @@ def group_by_landmarks(soup: BeautifulSoup, base_url: str) -> list[Section]:
         content = extract_content(element, base_url)
 
         # Skip empty sections
-        if not content.text and not content.headings and not content.links:
+        if not content.text and not content.headings and not content.links and not content.tables and not content.images:
             continue
 
         # Get raw HTML
@@ -396,7 +424,7 @@ def group_by_headings(soup: BeautifulSoup, base_url: str) -> list[Section]:
         content = extract_content(wrapper, base_url)
 
         # Skip empty sections
-        if not content.text and not content.headings:
+        if not content.text and not content.headings and not content.links and not content.tables and not content.images:
             continue
 
         raw_html = str(wrapper)
@@ -457,7 +485,7 @@ def parse_html(html: str, url: str) -> list[Section]:
         content = extract_content(main_element, url)
 
         # Only create section if there's actual content
-        if content.text or content.headings:
+        if content.text or content.headings or content.links or content.tables or content.images:
             raw_html = str(main_element)[:MAX_RAW_HTML_LENGTH]
             raw_html, truncated = truncate_html(raw_html)
 

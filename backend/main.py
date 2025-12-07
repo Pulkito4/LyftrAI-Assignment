@@ -84,9 +84,7 @@ frontend_dist = Path(__file__).parent.parent / FRONTEND_DIST_PATH
 
 if frontend_dist.exists():
     # Mount all static files from dist folder (includes assets, favicon, index.html)
-    app.mount(
-        "/", StaticFiles(directory=str(frontend_dist), html=True), name="static"
-    )
+    app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="static")
 else:
 
     @app.get("/")

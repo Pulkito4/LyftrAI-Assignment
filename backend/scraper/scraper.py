@@ -64,24 +64,44 @@ async def scrape_url(
         )
 
     try:
+        # If interactions are enabled, skip static and go directly to Playwright
+        if enable_interactions:
+            dynamic_result = await scrape_dynamic(
+                url,
+                enable_interactions=True,
+                interaction_strategy=interaction_strategy,
+            )
+            if dynamic_result:
+                return dynamic_result
+        
+        # Try static scraping first
         static_result, needs_js = await scrape_static(url)
 
+        # Return early if static scraping was successful
         if static_result and not needs_js:
             return static_result
 
+        # Fallback to dynamic scraping
         if needs_js:
             errors.append(
                 ScrapeError(
-                    message="Static HTML insufficient - using JavaScript rendering",
+                    message="Static HTML insufficient - using JavaScript rendering with interactions",
                     phase="fallback",
                 )
             )
-
-        dynamic_result = await scrape_dynamic(
-            url,
-            enable_interactions=enable_interactions,
-            interaction_strategy=interaction_strategy,
-        )
+            # Auto-enable interactions when Playwright is used (showcase depth >= 3)
+            dynamic_result = await scrape_dynamic(
+                url,
+                enable_interactions=True,  # Auto-enable for JS-heavy sites
+                interaction_strategy=interaction_strategy,
+            )
+        else:
+            # No JS needed, but trying dynamic anyway
+            dynamic_result = await scrape_dynamic(
+                url,
+                enable_interactions=False,
+                interaction_strategy=interaction_strategy,
+            )
 
         if dynamic_result:
             dynamic_result.errors.extend(errors)

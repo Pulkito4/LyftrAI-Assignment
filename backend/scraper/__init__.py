@@ -17,6 +17,7 @@ __all__ = [
     "parse_html",
     "extract_meta",
     "handle_interactions",
+    "normalize_url",
     "validate_url",
     "check_robots_txt",
     "needs_js_rendering",

@@ -44,7 +44,7 @@ const UrlInput = forwardRef(({ onScrape, loading, url, setUrl }, ref) => {
             className="w-5 h-5 rounded border-input text-primary focus:ring-2 focus:ring-primary disabled:cursor-not-allowed"
           />
           <label htmlFor="interactions" className="text-sm font-medium text-foreground cursor-pointer">
-            Enable Interactions (Depth ≥ 3)
+            Enable Interactions
           </label>
         </div>
 
